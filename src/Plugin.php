@@ -25,6 +25,7 @@ final class Plugin
         'ai-by-roadmap/create-page',
         'ai-by-roadmap/list-blocks',
         'ai-by-roadmap/compose-page',
+        'ai-by-roadmap/assemble-page',
         'ai-by-roadmap/get-job-status',
         'ai-by-roadmap/search-media',
         'ai-by-roadmap/analyze-content',
@@ -72,6 +73,7 @@ final class Plugin
         add_action('wp_abilities_api_init', [BlockAbilities\FillBlock::class,          'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\FillPage::class,           'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\ComposePage::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\AssemblePage::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetJobStatus::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetTargetAudience::class,  'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetTargetAudience::class,  'register']);
