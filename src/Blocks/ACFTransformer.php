@@ -12,6 +12,12 @@ namespace Roadmap\AiByRoadmap\Blocks;
  *   - Nested repeater fields (flattened to ACF's {name}_{index}_{field} format).
  *   - Associative-array fields (e.g. Font Awesome icon objects) → JSON-encoded.
  *   - Image-filename strings → resolved to attachment IDs via WP_Query.
+ *   - Inline Markdown safety net: a model may emit Markdown (`**bold**`,
+ *     `*italic*`) even though fields expect HTML. Using the block's own schema
+ *     (BlockRegistry), rich-text fields (format: "html") get Markdown converted
+ *     to <strong>/<em>; plain-text fields get the markers stripped so no stray
+ *     asterisks render. Asterisk emphasis only — underscores are left alone so
+ *     URLs/slugs (e.g. /foo_bar) are never corrupted.
  */
 final class ACFTransformer
 {
@@ -23,7 +29,9 @@ final class ACFTransformer
         $data       = [];
         $block_slug = str_replace('acf/', '', $block_name);
 
-        $this->process_fields($block_data, $data, $block_slug);
+        $props = BlockRegistry::get_blocks()[$block_name]['properties'] ?? [];
+
+        $this->process_fields($block_data, $data, $block_slug, '', $props);
 
         $attrs = [
             'id'   => uniqid('block_'),
@@ -50,13 +58,20 @@ final class ACFTransformer
         return '<!-- wp:' . $block_name . ' ' . $this->fallback_serialize($attrs) . ' /-->';
     }
 
-    private function process_fields(array $fields, array &$data, string $block_slug, string $prefix = ''): void
+    /**
+     * @param array<string, mixed> $fields
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $props  Schema properties for THIS field level.
+     */
+    private function process_fields(array $fields, array &$data, string $block_slug, string $prefix = '', array $props = []): void
     {
         foreach ($fields as $field_name => $field_value) {
             $prefixed = $prefix !== '' ? $prefix . '_' . $field_name : $field_name;
+            $spec     = isset($props[$field_name]) && is_array($props[$field_name]) ? $props[$field_name] : null;
 
             if (is_array($field_value) && isset($field_value[0]) && is_array($field_value[0])) {
-                $this->process_repeater($field_value, $data, $block_slug, $prefixed);
+                $sub_props = $spec['items']['properties'] ?? [];
+                $this->process_repeater($field_value, $data, $block_slug, $prefixed, (array) $sub_props);
                 continue;
             }
 
@@ -66,30 +81,38 @@ final class ACFTransformer
                 continue;
             }
 
-            $data[$prefixed]       = $field_value;
+            $data[$prefixed]       = is_string($field_value) ? $this->normalize_inline_md($field_value, $spec) : $field_value;
             $data['_' . $prefixed] = 'field_' . $block_slug . '_' . $prefixed;
         }
     }
 
-    private function process_repeater(array $rows, array &$data, string $block_slug, string $prefixed): void
+    /**
+     * @param array<int, mixed>    $rows
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $sub_props  Schema properties for a row's sub-fields.
+     */
+    private function process_repeater(array $rows, array &$data, string $block_slug, string $prefixed, array $sub_props = []): void
     {
         $data[$prefixed]       = count($rows);
         $data['_' . $prefixed] = 'field_' . $block_slug . '_' . $prefixed;
 
         foreach ($rows as $index => $row) {
             foreach ($row as $field => $value) {
-                $key = "{$prefixed}_{$index}_{$field}";
+                $key  = "{$prefixed}_{$index}_{$field}";
+                $spec = isset($sub_props[$field]) && is_array($sub_props[$field]) ? $sub_props[$field] : null;
 
                 if (is_array($value) && isset($value[0]) && is_array($value[0])) {
                     $data[$key]       = count($value);
                     $data['_' . $key] = "field_{$block_slug}_{$prefixed}_{$field}";
 
+                    $nested_props = $spec['items']['properties'] ?? [];
                     foreach ($value as $nested_index => $nested_row) {
                         $this->process_fields(
                             (array) $nested_row,
                             $data,
                             $block_slug,
-                            "{$prefixed}_{$index}_{$field}_{$nested_index}"
+                            "{$prefixed}_{$index}_{$field}_{$nested_index}",
+                            (array) $nested_props
                         );
                     }
                     continue;
@@ -101,10 +124,33 @@ final class ACFTransformer
                     continue;
                 }
 
-                $data[$key]       = $value;
+                $data[$key]       = is_string($value) ? $this->normalize_inline_md($value, $spec) : $value;
                 $data['_' . $key] = "field_{$block_slug}_{$prefixed}_{$field}";
             }
         }
+    }
+
+    /**
+     * Normalize inline Markdown emphasis. Rich-text fields (schema format
+     * "html") get HTML tags; everything else has the markers stripped so no
+     * literal asterisks ever render. Asterisk syntax only — underscores are
+     * preserved to avoid mangling URLs/slugs.
+     *
+     * @param array<string, mixed>|null $spec  This field's schema entry.
+     */
+    private function normalize_inline_md(string $value, ?array $spec): string
+    {
+        $is_html = is_array($spec) && ($spec['format'] ?? null) === 'html';
+
+        if ($is_html) {
+            $value = (string) preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $value);
+            $value = (string) preg_replace('/(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)/s', '<em>$1</em>', $value);
+            return $value;
+        }
+
+        $value = (string) preg_replace('/\*\*(.+?)\*\*/s', '$1', $value);
+        $value = (string) preg_replace('/(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)/s', '$1', $value);
+        return $value;
     }
 
     private function fallback_serialize(array $attrs): string

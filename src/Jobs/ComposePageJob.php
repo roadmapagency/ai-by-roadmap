@@ -60,7 +60,9 @@ final class ComposePageJob
             if ($post_id && ! empty($payload['replace_content'])) {
                 wp_update_post([
                     'ID'           => $post_id,
-                    'post_content' => $serialized,
+                    // wp_update_post() runs wp_unslash(); slash so ACF's
+                    // <-escaped block attributes survive intact.
+                    'post_content' => wp_slash($serialized),
                 ]);
                 $result['post_id']   = $post_id;
                 $result['edit_link'] = (string) get_edit_post_link($post_id, 'raw');
@@ -79,7 +81,9 @@ final class ComposePageJob
                     'post_type'    => 'page',
                     'post_status'  => 'draft',
                     'post_title'   => $title,
-                    'post_content' => $serialized,
+                    // wp_insert_post() runs wp_unslash(); slash so ACF's
+                    // <-escaped block attributes survive intact.
+                    'post_content' => wp_slash($serialized),
                 ], true);
 
                 if (is_wp_error($new_id)) {
