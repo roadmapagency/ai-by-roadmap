@@ -1,0 +1,13 @@
+.ai-by-roadmap-metabox textarea {
+	width: 100%;
+	font-family: inherit;
+}
+
+.ai-by-roadmap-status {
+	margin-top: 8px;
+}
+
+.ai-by-roadmap-status .notice {
+	margin: 4px 0;
+	padding: 4px 8px;
+}

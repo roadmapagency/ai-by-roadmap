@@ -1,0 +1,22 @@
+{
+    "name": "weareroadmap/ai-by-roadmap",
+    "description": "Surfaces ACF blocks and related AI features as WordPress Abilities so any LLM / agent can discover and use them.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.1",
+        "automattic/jetpack-autoloader": "^2",
+        "woocommerce/action-scheduler": "^3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Roadmap\\AiByRoadmap\\": "src/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "automattic/jetpack-autoloader": true
+        },
+        "sort-packages": true
+    }
+}
