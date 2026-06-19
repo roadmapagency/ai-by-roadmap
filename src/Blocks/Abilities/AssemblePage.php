@@ -29,7 +29,7 @@ final class AssemblePage
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Assemble a page from filled blocks', 'ai-by-roadmap'),
-            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved to a new draft page (or an existing post when post_id + replace_content are given). Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
+            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
@@ -58,11 +58,11 @@ final class AssemblePage
                     ],
                     'post_id'         => [
                         'type'        => 'integer',
-                        'description' => 'Optional post ID. If provided together with replace_content, that post is overwritten. If omitted, a new draft page is created.',
+                        'description' => 'Provide to UPDATE an existing page — e.g. an empty placeholder found via find-posts; its content is overwritten (error if it does not exist). Omit to create a new draft. Call find-posts first to decide which.',
                     ],
                     'replace_content' => [
                         'type'        => 'boolean',
-                        'description' => 'When post_id is provided, set true to overwrite its content. Ignored when post_id is omitted.',
+                        'description' => 'Deprecated/optional: supplying post_id already updates that post, so this flag is no longer required and is ignored.',
                     ],
                     'title'           => [
                         'type'        => 'string',
@@ -101,6 +101,16 @@ final class AssemblePage
         $registered  = BlockRegistry::get_blocks();
         $transformer = new ACFTransformer();
         $post_id     = isset($input['post_id']) ? (int) $input['post_id'] : null;
+
+        // A supplied post_id always means "update this post". Guard it up front so
+        // we never silently create a duplicate when the id is wrong.
+        if ($post_id && ! get_post($post_id)) {
+            return new \WP_Error('post_not_found', sprintf(
+                /* translators: %d: post ID */
+                __('No post with ID %d exists. Omit post_id to create a new page, or use find-posts to locate the right one.', 'ai-by-roadmap'),
+                $post_id
+            ));
+        }
 
         // Destination post type — an existing post's type when updating, else the
         // requested type (default page). Used to enforce a locked CPT template.
@@ -146,7 +156,7 @@ final class AssemblePage
         $result   = ['blocks' => $serialized];
         $content  = implode("\n\n", $serialized);
 
-        if ($post_id && ! empty($input['replace_content'])) {
+        if ($post_id) {
             wp_update_post([
                 'ID'           => $post_id,
                 // wp_update_post() runs wp_unslash() on input; slash so ACF's
@@ -155,7 +165,7 @@ final class AssemblePage
             ]);
             $result['post_id']   = $post_id;
             $result['edit_link'] = (string) get_edit_post_link($post_id, 'raw');
-        } elseif (! $post_id) {
+        } else {
             $title = (string) ($input['title'] ?? '');
             if ($title === '') {
                 $title = sprintf(

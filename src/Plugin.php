@@ -25,6 +25,7 @@ final class Plugin
         'ai-by-roadmap/create-page',
         'ai-by-roadmap/list-blocks',
         'ai-by-roadmap/list-post-types',
+        'ai-by-roadmap/find-posts',
         'ai-by-roadmap/compose-page',
         'ai-by-roadmap/assemble-page',
         'ai-by-roadmap/get-job-status',
@@ -70,6 +71,7 @@ final class Plugin
         add_action('wp_abilities_api_init', [BlockAbilities\CreatePage::class,          'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\ListBlocks::class,         'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\ListPostTypes::class,      'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\FindPosts::class,          'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\ChooseBlocks::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\ScoreBlocks::class,        'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\FillBlock::class,          'register']);

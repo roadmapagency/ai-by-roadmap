@@ -14,7 +14,7 @@ final class CreatePage
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Create an empty page', 'ai-by-roadmap'),
-            'description'         => __('Create a new empty WordPress post of the given post type and return its ID. Pass the returned post_id to compose-page to fill it with content. Call list-post-types first to choose the right post_type — match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → the type with slug "programs"), not the generic "page".', 'ai-by-roadmap'),
+            'description'         => __('Create a new empty WordPress post of the given post type and return its ID. Pass the returned post_id to compose-page to fill it with content. Call find-posts first — if a matching (often empty placeholder) page already exists, fill it via assemble-page instead of creating a duplicate. Call list-post-types to choose the right post_type — match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → the type with slug "programs"), not the generic "page".', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
