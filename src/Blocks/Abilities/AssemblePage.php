@@ -6,6 +6,7 @@ namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
 use Roadmap\AiByRoadmap\Blocks\ACFTransformer;
 use Roadmap\AiByRoadmap\Blocks\BlockRegistry;
+use Roadmap\AiByRoadmap\Blocks\BlockValidator;
 use Roadmap\AiByRoadmap\Blocks\CptTemplate;
 use Roadmap\AiByRoadmap\Plugin;
 
@@ -125,7 +126,7 @@ final class AssemblePage
 
         $types      = [];
         $serialized = [];
-        foreach ((array) $input['blocks'] as $block) {
+        foreach ((array) $input['blocks'] as $index => $block) {
             $block = (array) $block;
             $type  = (string) ($block['type'] ?? '');
 
@@ -157,6 +158,14 @@ final class AssemblePage
             // to empty so a block that legitimately has none still serializes.
             $fields = (array) ($block['fields'] ?? []);
             $fields[Plugin::AI_CONTENT_FIELD] = (string) ($fields[Plugin::AI_CONTENT_FIELD] ?? '');
+
+            // Field names are validated against the block's real ACF field tree before
+            // anything is serialized: ACFTransformer accepts any name, so an unchecked
+            // typo persists as a block that renders an empty slot.
+            $report = BlockValidator::validate($type, $fields);
+            if ($report !== []) {
+                return BlockValidator::to_wp_error($type, (int) $index, $report);
+            }
 
             $serialized[] = $transformer->convert([$type => $fields]);
         }

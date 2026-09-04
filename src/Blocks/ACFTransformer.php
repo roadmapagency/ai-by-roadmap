@@ -59,6 +59,24 @@ final class ACFTransformer
     }
 
     /**
+     * Check a block's field names and values against its real ACF field tree.
+     *
+     * convert() deliberately serializes whatever it is given, so callers that accept
+     * externally authored block data MUST run this first: an unknown field name is
+     * otherwise written with a fabricated key reference, binds to nothing, and renders
+     * an empty slot that looks fine in the markup.
+     *
+     * @param array<string, mixed> $block Single-key block array, as passed to convert().
+     * @return array<string, mixed> Empty when the block is valid.
+     */
+    public function validate(array $block): array
+    {
+        $block_name = (string) array_key_first($block);
+
+        return BlockValidator::validate($block_name, (array) $block[$block_name]);
+    }
+
+    /**
      * @param array<string, mixed> $fields
      * @param array<string, mixed> $data
      * @param array<string, mixed> $props  Schema properties for THIS field level.
