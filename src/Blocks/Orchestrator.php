@@ -63,7 +63,8 @@ final class Orchestrator
     }
 
     /**
-     * @return string[] Array of serialized ACF block comments.
+     * @return string[] Array of serialized block comments (ACF blocks, plus any
+     *                  fixed rows a locked CPT template declares, e.g. synced patterns).
      */
     public function generate_content(string $content, string $target_audience = '', ?int $post_id = null): array
     {
@@ -120,8 +121,9 @@ final class Orchestrator
         // entry of that type gets the SAME layout.
         $locked = $this->locked_template_for_post($data['post_id'] ?? null);
         if ($locked !== null) {
-            $data['chosen_blocks']        = $locked;
-            $data['first_attempt_blocks'] = $locked;
+            $data['chosen_blocks']        = $locked['chosen'];
+            $data['first_attempt_blocks'] = $locked['chosen'];
+            $data['template_rows']        = $locked['rows'];
             $data['layout_locked']        = true;
             return $data;
         }
@@ -141,10 +143,12 @@ final class Orchestrator
     /**
      * If $post_id belongs to a post type registered with a locked block
      * template, return that template as the pipeline's [{type, intent}] block
-     * list. Returns null for normal pages / flexible post types, where the LLM
+     * list (`chosen` — fillable rows only) plus the full template `rows` so
+     * fixed rows (synced patterns etc.) can be re-inserted when transforming.
+     * Returns null for normal pages / flexible post types, where the LLM
      * chooser should decide the layout instead.
      *
-     * @return array<int, array{type:string, intent:string}>|null
+     * @return array{chosen: array<int, array{type:string, intent:string}>, rows: array<int, array{type:string, attrs:array<string, mixed>, fixed:bool}>}|null
      */
     private function locked_template_for_post(?int $post_id): ?array
     {
@@ -163,20 +167,21 @@ final class Orchestrator
             return null;
         }
 
-        $catalogue = BlockRegistry::get_block_descriptions();
-        $blocks    = [];
-        foreach ($obj->template as $entry) {
-            // Each entry is [ blockName, attrs?, innerBlocks? ].
-            $type = is_array($entry) ? ($entry[0] ?? '') : (string) $entry;
-            if ($type !== '') {
-                $blocks[] = [
-                    'type'   => (string) $type,
-                    'intent' => (string) ($catalogue[$type] ?? ''),
-                ];
-            }
+        $tpl = CptTemplate::for_post_type((string) $post_type);
+        if (empty($tpl['rows'])) {
+            return null;
         }
 
-        return $blocks ?: null;
+        $catalogue = BlockRegistry::get_block_descriptions();
+        $chosen    = [];
+        foreach ($tpl['blocks'] as $type) {
+            $chosen[] = [
+                'type'   => $type,
+                'intent' => (string) ($catalogue[$type] ?? ''),
+            ];
+        }
+
+        return ['chosen' => $chosen, 'rows' => $tpl['rows']];
     }
 
     public function llm_score_and_retry(array $data): array
@@ -247,6 +252,12 @@ final class Orchestrator
 
     public function fill_blocks(array $data): array
     {
+        // A locked template made entirely of fixed rows leaves nothing to fill.
+        if (empty($data['chosen_blocks'])) {
+            $data['filled_blocks'] = [];
+            return $data;
+        }
+
         $agent  = new PageFillerAgent($data['chosen_blocks']);
 
         $prompt = 'Content:' . "\n" . $data['content'];
@@ -278,6 +289,13 @@ final class Orchestrator
         foreach ($data['filled_blocks'] as $block_data) {
             $blocks[] = $this->transformer->convert($block_data);
         }
+
+        // Locked CPT: put the template's fixed rows (synced patterns etc.) back
+        // at their positions so the saved content matches the template exactly.
+        if (! empty($data['template_rows'])) {
+            $blocks = CptTemplate::merge_fixed_rows($data['template_rows'], $blocks);
+        }
+
         $data['blocks'] = $blocks;
         return $data;
     }

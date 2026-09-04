@@ -29,7 +29,7 @@ final class AssemblePage
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Assemble a page from filled blocks', 'ai-by-roadmap'),
-            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
+            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. list-post-types marks some template rows fixed:true (e.g. synced patterns, core/block): never include those in blocks — supply only the fillable_blocks, in order, and the server inserts the fixed rows at their template positions. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
@@ -118,11 +118,26 @@ final class AssemblePage
             ? (string) get_post_type($post_id)
             : (string) ($input['post_type'] ?? 'page');
 
+        // The destination's locked template (if any). Fixed rows (e.g. synced
+        // patterns) are never supplied by the caller — they are merged in below.
+        $tpl         = $target_type !== '' ? CptTemplate::for_post_type($target_type) : ['rows' => [], 'blocks' => [], 'lock' => '', 'has_fixed' => false];
+        $fixed_types = CptTemplate::fixed_types($tpl['rows']);
+
         $types      = [];
         $serialized = [];
         foreach ((array) $input['blocks'] as $block) {
             $block = (array) $block;
             $type  = (string) ($block['type'] ?? '');
+
+            if (in_array($type, $fixed_types, true)) {
+                return new \WP_Error('fixed_template_row', sprintf(
+                    /* translators: 1: block type, 2: post type, 3: list of fillable block types */
+                    __('"%1$s" is a fixed row of the "%2$s" template and is inserted automatically. Omit it and supply only these blocks, in order: %3$s.', 'ai-by-roadmap'),
+                    $type,
+                    $target_type,
+                    implode(', ', $tpl['blocks'])
+                ));
+            }
 
             if (! isset($registered[$type])) {
                 return new \WP_Error(
@@ -148,9 +163,15 @@ final class AssemblePage
 
         // Reject (with actionable feedback) before persisting anything if the
         // destination post type has a locked block template the blocks violate.
-        $template_check = self::enforce_template($target_type, $types);
+        $template_check = self::enforce_template($tpl, $target_type, $types);
         if (is_wp_error($template_check)) {
             return $template_check;
+        }
+
+        // Re-insert the template's fixed rows (synced patterns etc.) at their
+        // positions so the saved post matches the locked template exactly.
+        if ($tpl['has_fixed'] && in_array($tpl['lock'], ['all', 'insert'], true)) {
+            $serialized = CptTemplate::merge_fixed_rows($tpl['rows'], $serialized);
         }
 
         $result   = ['blocks' => $serialized];
@@ -213,20 +234,32 @@ final class AssemblePage
      *   - template_lock "insert" → same set of blocks (with counts), any order.
      *   - no lock / no template  → anything goes (flexible CPT or plain page).
      *
+     * Fixed rows (see CptTemplate) are excluded from the comparison: the caller
+     * supplies only the fillable blocks and the server merges the fixed rows in.
+     *
+     * @param array{rows:array<int, array{type:string, attrs:array<string, mixed>, fixed:bool}>, blocks:array<int, string>, lock:string, has_fixed:bool} $tpl
      * @param array<int, string> $types Block type IDs supplied, in order.
      * @return true|\WP_Error
      */
-    private static function enforce_template(string $post_type, array $types)
+    private static function enforce_template(array $tpl, string $post_type, array $types)
     {
         if ($post_type === '') {
             return true;
         }
 
-        $tpl      = CptTemplate::for_post_type($post_type);
         $expected = $tpl['blocks'];
 
         if (empty($expected) || ! in_array($tpl['lock'], ['all', 'insert'], true)) {
             return true;
+        }
+
+        $fixed_note = '';
+        if ($tpl['has_fixed']) {
+            $fixed_note = ' ' . sprintf(
+                /* translators: %s: list of fixed block types */
+                __('Rows of type %s are fixed template rows inserted by the server — do not include them.', 'ai-by-roadmap'),
+                implode(', ', CptTemplate::fixed_types($tpl['rows']))
+            );
         }
 
         if ($tpl['lock'] === 'all') {
@@ -245,7 +278,7 @@ final class AssemblePage
 
             return new \WP_Error('template_mismatch', sprintf(
                 /* translators: 1: post type, 2: expected count, 3: expected blocks, 4: supplied count, 5: supplied blocks, 6: position, 7: expected block, 8: supplied block */
-                __('Post type "%1$s" has a locked block template (template_lock: all). Supply exactly these %2$d blocks, in this order: %3$s. You supplied %4$d: %5$s. First mismatch at position %6$d: expected "%7$s", got "%8$s". Adjust your blocks to match the template exactly, then call assemble-page again.', 'ai-by-roadmap'),
+                __('Post type "%1$s" has a locked block template (template_lock: all). Supply exactly these %2$d blocks, in this order: %3$s. You supplied %4$d: %5$s. First mismatch at position %6$d: expected "%7$s", got "%8$s". Adjust your blocks to match the template exactly, then call assemble-page again.', 'ai-by-roadmap') . $fixed_note,
                 $post_type,
                 count($expected),
                 implode(', ', $expected),
@@ -282,7 +315,7 @@ final class AssemblePage
 
         return new \WP_Error('template_mismatch', sprintf(
             /* translators: 1: post type, 2: expected blocks, 3: supplied blocks, 4: missing summary, 5: extra summary */
-            __('Post type "%1$s" has a locked block template (template_lock: insert). Supply exactly this set of blocks (order may vary): %2$s. You supplied: %3$s. Missing: %4$s. Unexpected: %5$s. Adjust your blocks to match, then call assemble-page again.', 'ai-by-roadmap'),
+            __('Post type "%1$s" has a locked block template (template_lock: insert). Supply exactly this set of blocks (order may vary): %2$s. You supplied: %3$s. Missing: %4$s. Unexpected: %5$s. Adjust your blocks to match, then call assemble-page again.', 'ai-by-roadmap') . $fixed_note,
             $post_type,
             implode(', ', $expected),
             $types ? implode(', ', $types) : '(none)',

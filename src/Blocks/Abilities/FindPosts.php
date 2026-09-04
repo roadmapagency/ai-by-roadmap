@@ -116,7 +116,7 @@ final class FindPosts
 
         $rows = [];
         foreach ($posts as $post) {
-            $block_count = self::acf_block_count($post->post_content);
+            $block_count = self::block_count($post->post_content);
             $is_empty    = $block_count === 0;
 
             if ($only_empty && ! $is_empty) {
@@ -147,14 +147,19 @@ final class FindPosts
         return ['posts' => array_slice($rows, 0, $limit)];
     }
 
-    private static function acf_block_count(string $content): int
+    /**
+     * Number of real blocks in the content (ACF blocks and fixed rows such as
+     * synced patterns alike). Freeform whitespace "blocks" have no name and are
+     * not counted, so a post made only of patterns is not reported as empty.
+     */
+    private static function block_count(string $content): int
     {
         if (trim($content) === '') {
             return 0;
         }
         $count = 0;
         foreach (parse_blocks($content) as $block) {
-            if (! empty($block['blockName']) && str_starts_with((string) $block['blockName'], 'acf/')) {
+            if (! empty($block['blockName'])) {
                 $count++;
             }
         }
