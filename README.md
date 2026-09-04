@@ -289,11 +289,38 @@ For converting an external website page to a draft Roadmap Starter page, the can
 
 ---
 
+## Block field validation
+
+`ACFTransformer::convert()` serializes whatever field names it is given, emitting a
+`field_<slug>_<name>` reference for each. An unknown name therefore produces a block that
+looks valid, binds to nothing in ACF, and renders an empty slot — a silent failure that a
+markup or `strlen()` check cannot see.
+
+Any caller that accepts externally authored block data must validate first:
+
+```php
+$report = BlockValidator::validate('acf/hero', $fields);   // [] when clean
+if ($report !== []) {
+    return BlockValidator::to_wp_error('acf/hero', $index, $report);
+}
+```
+
+`BlockValidator` reads the block's real ACF field tree (`acf_get_field_groups()` +
+`acf_get_fields()`), not the JSON schema contributed to `BlockRegistry` — that one marks
+every field required, which is right for constraining a model and wrong for validating
+input. It reports unknown field paths (with `did_you_mean` suggestions), enum violations
+and empty required fields. `assemble-page` enforces it; the LLM fill paths
+(`fill-page`, `fill-block`, `compose-page`) are already constrained by
+`additionalProperties: false` schemas.
+
+---
+
 ## Source map (for skill authors who want to inspect behaviour)
 
 - Plugin entry point: [ai-by-roadmap.php](ai-by-roadmap.php)
 - Abilities (one file each): [src/Core/Abilities/](src/Core/Abilities/) and [src/Blocks/Abilities/](src/Blocks/Abilities/)
 - Orchestrator pipeline: [src/Blocks/Orchestrator.php](src/Blocks/Orchestrator.php)
+- Block serializer + field validation: [src/Blocks/ACFTransformer.php](src/Blocks/ACFTransformer.php), [src/Blocks/BlockValidator.php](src/Blocks/BlockValidator.php)
 - Agents (system prompts): [src/Core/Agents/](src/Core/Agents/) and [src/Blocks/Agents/](src/Blocks/Agents/)
 - Action Scheduler job: [src/Jobs/ComposePageJob.php](src/Jobs/ComposePageJob.php)
 - MCP server registration: [src/Mcp/Server.php](src/Mcp/Server.php)
