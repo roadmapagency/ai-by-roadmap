@@ -30,8 +30,11 @@ final class Plugin
         'ai-by-roadmap/assemble-page',
         'ai-by-roadmap/get-job-status',
         'ai-by-roadmap/search-media',
+        'ai-by-roadmap/upload-media',
         'ai-by-roadmap/analyze-content',
         'ai-by-roadmap/rate-generation',
+        'ai-by-roadmap/get-post-blocks',
+        'ai-by-roadmap/set-block-image',
     ];
 
     public const AI_CONTENT_FIELD = 'ai_content';
@@ -64,6 +67,7 @@ final class Plugin
 
         add_action('wp_abilities_api_init', [CoreAbilities\AnalyzeContent::class,   'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\SearchMedia::class,      'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\UploadMedia::class,      'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\AnalyzeMedia::class,     'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\ReindexMedia::class,     'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\RateGeneration::class,   'register']);
@@ -79,6 +83,8 @@ final class Plugin
         add_action('wp_abilities_api_init', [BlockAbilities\ComposePage::class,        'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\AssemblePage::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetJobStatus::class,       'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\GetPostBlocks::class,      'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\SetBlockImage::class,      'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetTargetAudience::class,  'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetTargetAudience::class,  'register']);
 
