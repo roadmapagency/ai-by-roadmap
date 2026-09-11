@@ -26,12 +26,7 @@ final class ACFTransformer
         $block_name = (string) array_key_first($block);
         $block_data = (array) $block[$block_name];
 
-        $data       = [];
-        $block_slug = str_replace('acf/', '', $block_name);
-
-        $props = BlockRegistry::get_blocks()[$block_name]['properties'] ?? [];
-
-        $this->process_fields($block_data, $data, $block_slug, '', $props);
+        $data = $this->flatten($block_name, $block_data);
 
         $attrs = [
             'id'   => uniqid('block_'),
@@ -56,6 +51,27 @@ final class ACFTransformer
         }
 
         return '<!-- wp:' . $block_name . ' ' . $this->fallback_serialize($attrs) . ' /-->';
+    }
+
+    /**
+     * Human-shaped field values → ACF's flat block `data` (values plus the
+     * `_field` → `field_{slug}_{name}` pointer rows), with the Markdown safety
+     * net applied. This is the single flattening path: convert() uses it for
+     * whole blocks and update-block-fields uses it for merge patches, so the
+     * two can never drift.
+     *
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    public function flatten(string $block_name, array $fields): array
+    {
+        $data       = [];
+        $block_slug = str_replace('acf/', '', $block_name);
+        $props      = BlockRegistry::get_blocks()[$block_name]['properties'] ?? [];
+
+        $this->process_fields($fields, $data, $block_slug, '', (array) $props);
+
+        return $data;
     }
 
     /**

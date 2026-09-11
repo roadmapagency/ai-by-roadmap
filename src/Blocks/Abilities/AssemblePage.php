@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
 use Roadmap\AiByRoadmap\Blocks\ACFTransformer;
+use Roadmap\AiByRoadmap\Blocks\BlockPatcher;
 use Roadmap\AiByRoadmap\Blocks\BlockRegistry;
 use Roadmap\AiByRoadmap\Blocks\CptTemplate;
 use Roadmap\AiByRoadmap\Plugin;
@@ -29,7 +30,7 @@ final class AssemblePage
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Assemble a page from filled blocks', 'ai-by-roadmap'),
-            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. list-post-types marks some template rows fixed:true (e.g. synced patterns, core/block): never include those in blocks — supply only the fillable_blocks, in order, and the server inserts the fixed rows at their template positions. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
+            'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. list-post-types marks some template rows fixed:true (e.g. synced patterns, core/block): never include those in blocks — supply only the fillable_blocks, in order, and the server inserts the fixed rows at their template positions. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. This tool builds whole pages: to change copy or structure on a page that already has blocks, use get-post-blocks (include_fields: true) with update-block-fields, insert-block, remove-block or move-block instead — a non-empty post is refused here unless replace_content is true. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
@@ -58,11 +59,12 @@ final class AssemblePage
                     ],
                     'post_id'         => [
                         'type'        => 'integer',
-                        'description' => 'Provide to UPDATE an existing page — e.g. an empty placeholder found via find-posts; its content is overwritten (error if it does not exist). Omit to create a new draft. Call find-posts first to decide which.',
+                        'description' => 'Provide to fill an EXISTING post — e.g. an empty placeholder found via find-posts (error if it does not exist). Omit to create a new draft. A post that already has blocks is refused unless replace_content is true; to change part of an existing page use update-block-fields / insert-block / remove-block / move-block instead.',
                     ],
                     'replace_content' => [
                         'type'        => 'boolean',
-                        'description' => 'Deprecated/optional: supplying post_id already updates that post, so this flag is no longer required and is ignored.',
+                        'default'     => false,
+                        'description' => 'Set true to DISCARD the existing content of post_id and replace it with these blocks. Only needed when the post already has blocks; this is destructive, so confirm with the user first.',
                     ],
                     'title'           => [
                         'type'        => 'string',
@@ -104,12 +106,27 @@ final class AssemblePage
 
         // A supplied post_id always means "update this post". Guard it up front so
         // we never silently create a duplicate when the id is wrong.
-        if ($post_id && ! get_post($post_id)) {
+        $existing = $post_id ? get_post($post_id) : null;
+        if ($post_id && ! $existing) {
             return new \WP_Error('post_not_found', sprintf(
                 /* translators: %d: post ID */
                 __('No post with ID %d exists. Omit post_id to create a new page, or use find-posts to locate the right one.', 'ai-by-roadmap'),
                 $post_id
-            ));
+            ), ['status' => 404]);
+        }
+
+        // Overwriting is the destructive path, so it is opt-in: a post that
+        // already has blocks is only replaced when replace_content is true.
+        if ($existing) {
+            $existing_count = BlockPatcher::named_count(parse_blocks((string) $existing->post_content));
+            if ($existing_count > 0 && empty($input['replace_content'])) {
+                return new \WP_Error('post_not_empty', sprintf(
+                    /* translators: 1: post ID, 2: block count */
+                    __('Post %1$d already has %2$d blocks. To edit it, use get-post-blocks (include_fields: true) with update-block-fields, insert-block, remove-block or move-block. To discard its content and rebuild it from scratch, call assemble-page again with replace_content: true.', 'ai-by-roadmap'),
+                    $post_id,
+                    $existing_count
+                ), ['status' => 409]);
+            }
         }
 
         // Destination post type — an existing post's type when updating, else the
@@ -163,7 +180,7 @@ final class AssemblePage
 
         // Reject (with actionable feedback) before persisting anything if the
         // destination post type has a locked block template the blocks violate.
-        $template_check = self::enforce_template($tpl, $target_type, $types);
+        $template_check = CptTemplate::validate($tpl, $target_type, $types);
         if (is_wp_error($template_check)) {
             return $template_check;
         }
@@ -178,12 +195,15 @@ final class AssemblePage
         $content  = implode("\n\n", $serialized);
 
         if ($post_id) {
-            wp_update_post([
+            $updated = wp_update_post([
                 'ID'           => $post_id,
                 // wp_update_post() runs wp_unslash() on input; slash so ACF's
                 // <-escaped block attributes survive intact.
                 'post_content' => wp_slash($content),
-            ]);
+            ], true);
+            if (is_wp_error($updated)) {
+                return $updated;
+            }
             $result['post_id']   = $post_id;
             $result['edit_link'] = (string) get_edit_post_link($post_id, 'raw');
         } else {
@@ -225,130 +245,4 @@ final class AssemblePage
         return $result;
     }
 
-    /**
-     * Enforce a destination post type's locked block template. Returns true when
-     * the blocks are acceptable, or a WP_Error whose message tells the caller
-     * exactly how to fix the block list.
-     *
-     *   - template_lock "all"    → blocks must match the template exactly, in order.
-     *   - template_lock "insert" → same set of blocks (with counts), any order.
-     *   - no lock / no template  → anything goes (flexible CPT or plain page).
-     *
-     * Fixed rows (see CptTemplate) are excluded from the comparison: the caller
-     * supplies only the fillable blocks and the server merges the fixed rows in.
-     *
-     * @param array{rows:array<int, array{type:string, attrs:array<string, mixed>, fixed:bool}>, blocks:array<int, string>, lock:string, has_fixed:bool} $tpl
-     * @param array<int, string> $types Block type IDs supplied, in order.
-     * @return true|\WP_Error
-     */
-    private static function enforce_template(array $tpl, string $post_type, array $types)
-    {
-        if ($post_type === '') {
-            return true;
-        }
-
-        $expected = $tpl['blocks'];
-
-        if (empty($expected) || ! in_array($tpl['lock'], ['all', 'insert'], true)) {
-            return true;
-        }
-
-        $fixed_note = '';
-        if ($tpl['has_fixed']) {
-            $fixed_note = ' ' . sprintf(
-                /* translators: %s: list of fixed block types */
-                __('Rows of type %s are fixed template rows inserted by the server — do not include them.', 'ai-by-roadmap'),
-                implode(', ', CptTemplate::fixed_types($tpl['rows']))
-            );
-        }
-
-        if ($tpl['lock'] === 'all') {
-            if ($types === $expected) {
-                return true;
-            }
-
-            $pos = 0;
-            $max = max(count($expected), count($types));
-            for ($i = 0; $i < $max; $i++) {
-                if (($expected[$i] ?? null) !== ($types[$i] ?? null)) {
-                    $pos = $i + 1;
-                    break;
-                }
-            }
-
-            return new \WP_Error('template_mismatch', sprintf(
-                /* translators: 1: post type, 2: expected count, 3: expected blocks, 4: supplied count, 5: supplied blocks, 6: position, 7: expected block, 8: supplied block */
-                __('Post type "%1$s" has a locked block template (template_lock: all). Supply exactly these %2$d blocks, in this order: %3$s. You supplied %4$d: %5$s. First mismatch at position %6$d: expected "%7$s", got "%8$s". Adjust your blocks to match the template exactly, then call assemble-page again.', 'ai-by-roadmap') . $fixed_note,
-                $post_type,
-                count($expected),
-                implode(', ', $expected),
-                count($types),
-                $types ? implode(', ', $types) : '(none)',
-                $pos,
-                $expected[$pos - 1] ?? '(none)',
-                $types[$pos - 1] ?? '(none)'
-            ));
-        }
-
-        // template_lock "insert": same multiset of block types, order-independent.
-        $want = $expected;
-        $got  = $types;
-        sort($want);
-        sort($got);
-        if ($want === $got) {
-            return true;
-        }
-
-        // Per-type count deltas: positive = missing that many, negative = extra.
-        $expected_counts = self::counts($expected);
-        $got_counts      = self::counts($types);
-        $missing         = [];
-        $extra           = [];
-        foreach (array_keys($expected_counts + $got_counts) as $type) {
-            $delta = ($expected_counts[$type] ?? 0) - ($got_counts[$type] ?? 0);
-            if ($delta > 0) {
-                $missing[$type] = $delta;
-            } elseif ($delta < 0) {
-                $extra[$type] = -$delta;
-            }
-        }
-
-        return new \WP_Error('template_mismatch', sprintf(
-            /* translators: 1: post type, 2: expected blocks, 3: supplied blocks, 4: missing summary, 5: extra summary */
-            __('Post type "%1$s" has a locked block template (template_lock: insert). Supply exactly this set of blocks (order may vary): %2$s. You supplied: %3$s. Missing: %4$s. Unexpected: %5$s. Adjust your blocks to match, then call assemble-page again.', 'ai-by-roadmap') . $fixed_note,
-            $post_type,
-            implode(', ', $expected),
-            $types ? implode(', ', $types) : '(none)',
-            self::summarize($missing),
-            self::summarize($extra)
-        ));
-    }
-
-    /**
-     * @param array<int, string> $items
-     * @return array<string, int> block type => count
-     */
-    private static function counts(array $items): array
-    {
-        $counts = [];
-        foreach ($items as $item) {
-            $counts[$item] = ($counts[$item] ?? 0) + 1;
-        }
-        return $counts;
-    }
-
-    /**
-     * @param array<string, int> $counts
-     */
-    private static function summarize(array $counts): string
-    {
-        if (empty($counts)) {
-            return '(none)';
-        }
-        $parts = [];
-        foreach ($counts as $type => $n) {
-            $parts[] = $n > 1 ? "{$type} x{$n}" : $type;
-        }
-        return implode(', ', $parts);
-    }
 }

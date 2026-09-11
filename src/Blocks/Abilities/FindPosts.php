@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
+use Roadmap\AiByRoadmap\Blocks\BlockPatcher;
+
 /**
  * Discovery ability: find existing posts so the caller can decide whether to
  * update one (e.g. an empty placeholder left by an import) or create a new page.
@@ -25,7 +27,7 @@ final class FindPosts
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Find existing posts', 'ai-by-roadmap'),
-            'description'         => __('Find existing posts before deciding whether to create or update. Pass the source doc\'s route, slug, or title as "query"; results are returned as ranked candidates (match_score 0–1), NOT exact matches — review them and judge whether any is the page you mean, since slugs/titles often differ slightly. Imports often leave empty placeholder drafts (is_empty:true) that should be filled rather than duplicated: to fill one, call assemble-page with its post_id. Only create a new page when no candidate fits. Avoid overwriting pages where is_empty is false unless you intend to replace their content.', 'ai-by-roadmap'),
+            'description'         => __('Find existing posts before deciding whether to create or update. Pass the source doc\'s route, slug, or title as "query"; results are returned as ranked candidates (match_score 0–1), NOT exact matches — review them and judge whether any is the page you mean, since slugs/titles often differ slightly. Imports often leave empty placeholder drafts (is_empty:true) that should be filled rather than duplicated: to fill one, call assemble-page with its post_id. Only create a new page when no candidate fits. A page with is_empty:false already has content — edit it with get-post-blocks (include_fields: true) + update-block-fields / insert-block / remove-block / move-block rather than rebuilding it; assemble-page refuses such posts unless replace_content is true. block_count counts every block incl. fixed rows (synced patterns); acf_block_count is the number of editable ACF blocks, i.e. the index space of the block tools.', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
@@ -73,8 +75,9 @@ final class FindPosts
                                 'permalink'   => ['type' => 'string'],
                                 'edit_url'    => ['type' => 'string'],
                                 'is_empty'    => ['type' => 'boolean'],
-                                'block_count' => ['type' => 'integer'],
-                                'modified'    => ['type' => 'string'],
+                                'block_count'     => ['type' => 'integer', 'description' => 'All named blocks incl. fixed rows such as synced patterns.'],
+                                'acf_block_count' => ['type' => 'integer', 'description' => 'Editable ACF blocks only — the index space used by get-post-blocks and the block edit tools.'],
+                                'modified'        => ['type' => 'string', 'description' => 'Pass as expected_modified to a write tool to guard against concurrent edits.'],
                                 'match_score' => ['type' => 'number'],
                             ],
                         ],
@@ -116,7 +119,8 @@ final class FindPosts
 
         $rows = [];
         foreach ($posts as $post) {
-            $block_count = self::block_count($post->post_content);
+            $parsed      = trim((string) $post->post_content) === '' ? [] : parse_blocks((string) $post->post_content);
+            $block_count = BlockPatcher::named_count($parsed);
             $is_empty    = $block_count === 0;
 
             if ($only_empty && ! $is_empty) {
@@ -131,9 +135,10 @@ final class FindPosts
                 'status'      => (string) $post->post_status,
                 'permalink'   => (string) get_permalink($post),
                 'edit_url'    => (string) get_edit_post_link($post->ID, 'raw'),
-                'is_empty'    => $is_empty,
-                'block_count' => $block_count,
-                'modified'    => (string) $post->post_modified,
+                'is_empty'        => $is_empty,
+                'block_count'     => $block_count,
+                'acf_block_count' => count(BlockPatcher::acf_positions($parsed)),
+                'modified'        => BlockPatcher::modified($post),
                 'match_score' => $query === ''
                     ? 1.0
                     : self::score($query, (string) $post->post_title, (string) $post->post_name),
@@ -145,25 +150,6 @@ final class FindPosts
         usort($rows, static fn($a, $b) => $b['match_score'] <=> $a['match_score']);
 
         return ['posts' => array_slice($rows, 0, $limit)];
-    }
-
-    /**
-     * Number of real blocks in the content (ACF blocks and fixed rows such as
-     * synced patterns alike). Freeform whitespace "blocks" have no name and are
-     * not counted, so a post made only of patterns is not reported as empty.
-     */
-    private static function block_count(string $content): int
-    {
-        if (trim($content) === '') {
-            return 0;
-        }
-        $count = 0;
-        foreach (parse_blocks($content) as $block) {
-            if (! empty($block['blockName'])) {
-                $count++;
-            }
-        }
-        return $count;
     }
 
     /**

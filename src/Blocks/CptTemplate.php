@@ -59,6 +59,169 @@ final class CptTemplate
     }
 
     /**
+     * Whether a template lock permits a structural operation, following the
+     * editor's own semantics: "all" forbids inserting, removing and moving;
+     * "insert" forbids inserting and removing but allows reordering; anything
+     * else (no lock, "contentOnly" is not used for post types) allows all.
+     *
+     * @param string $op One of insert|remove|move.
+     */
+    public static function lock_allows(string $lock, string $op): bool
+    {
+        if ($lock === 'all') {
+            return false;
+        }
+        if ($lock === 'insert') {
+            return $op === 'move';
+        }
+        return true;
+    }
+
+    /**
+     * WP_Error explaining that a structural edit is not allowed on this type.
+     */
+    public static function locked_error(string $post_type, string $lock, string $op): \WP_Error
+    {
+        return new \WP_Error('template_locked', sprintf(
+            /* translators: 1: operation, 2: post type, 3: template lock value */
+            __('Cannot %1$s a block on post type "%2$s": its block template is locked (template_lock: %3$s). Edit the block\'s fields in place with update-block-fields, or rebuild the post with assemble-page using the exact template.', 'ai-by-roadmap'),
+            $op,
+            $post_type,
+            $lock
+        ), ['status' => 409]);
+    }
+
+    /**
+     * Enforce a post type's locked block template against an ordered list of
+     * fillable block types. Returns true when acceptable, or a WP_Error whose
+     * message tells the caller exactly how to fix the block list.
+     *
+     *   - template_lock "all"    → blocks must match the template exactly, in order.
+     *   - template_lock "insert" → same set of blocks (with counts), any order.
+     *   - no lock / no template  → anything goes (flexible CPT or plain page).
+     *
+     * Fixed rows are excluded from the comparison: callers supply only the
+     * fillable blocks and the server merges the fixed rows in.
+     *
+     * @param array{rows:array<int, array{type:string, attrs:array<string, mixed>, fixed:bool}>, blocks:array<int, string>, lock:string, has_fixed:bool} $tpl
+     * @param array<int, string> $types Block type IDs, in order.
+     * @return true|\WP_Error
+     */
+    public static function validate(array $tpl, string $post_type, array $types, string $retry_hint = '')
+    {
+        if ($post_type === '') {
+            return true;
+        }
+
+        $expected = $tpl['blocks'];
+
+        if (empty($expected) || ! in_array($tpl['lock'], ['all', 'insert'], true)) {
+            return true;
+        }
+
+        $fixed_note = '';
+        if ($tpl['has_fixed']) {
+            $fixed_note = ' ' . sprintf(
+                /* translators: %s: list of fixed block types */
+                __('Rows of type %s are fixed template rows inserted by the server — do not include them.', 'ai-by-roadmap'),
+                implode(', ', self::fixed_types($tpl['rows']))
+            );
+        }
+        if ($retry_hint === '') {
+            $retry_hint = __('Adjust your blocks to match the template exactly, then call assemble-page again.', 'ai-by-roadmap');
+        }
+
+        if ($tpl['lock'] === 'all') {
+            if ($types === $expected) {
+                return true;
+            }
+
+            $pos = 0;
+            $max = max(count($expected), count($types));
+            for ($i = 0; $i < $max; $i++) {
+                if (($expected[$i] ?? null) !== ($types[$i] ?? null)) {
+                    $pos = $i + 1;
+                    break;
+                }
+            }
+
+            return new \WP_Error('template_mismatch', sprintf(
+                /* translators: 1: post type, 2: expected count, 3: expected blocks, 4: supplied count, 5: supplied blocks, 6: position, 7: expected block, 8: supplied block */
+                __('Post type "%1$s" has a locked block template (template_lock: all). Supply exactly these %2$d blocks, in this order: %3$s. You supplied %4$d: %5$s. First mismatch at position %6$d: expected "%7$s", got "%8$s".', 'ai-by-roadmap') . ' ' . $retry_hint . $fixed_note,
+                $post_type,
+                count($expected),
+                implode(', ', $expected),
+                count($types),
+                $types ? implode(', ', $types) : '(none)',
+                $pos,
+                $expected[$pos - 1] ?? '(none)',
+                $types[$pos - 1] ?? '(none)'
+            ));
+        }
+
+        // template_lock "insert": same multiset of block types, order-independent.
+        $want = $expected;
+        $got  = $types;
+        sort($want);
+        sort($got);
+        if ($want === $got) {
+            return true;
+        }
+
+        // Per-type count deltas: positive = missing that many, negative = extra.
+        $expected_counts = self::counts($expected);
+        $got_counts      = self::counts($types);
+        $missing         = [];
+        $extra           = [];
+        foreach (array_keys($expected_counts + $got_counts) as $type) {
+            $delta = ($expected_counts[$type] ?? 0) - ($got_counts[$type] ?? 0);
+            if ($delta > 0) {
+                $missing[$type] = $delta;
+            } elseif ($delta < 0) {
+                $extra[$type] = -$delta;
+            }
+        }
+
+        return new \WP_Error('template_mismatch', sprintf(
+            /* translators: 1: post type, 2: expected blocks, 3: supplied blocks, 4: missing summary, 5: extra summary */
+            __('Post type "%1$s" has a locked block template (template_lock: insert). Supply exactly this set of blocks (order may vary): %2$s. You supplied: %3$s. Missing: %4$s. Unexpected: %5$s.', 'ai-by-roadmap') . ' ' . $retry_hint . $fixed_note,
+            $post_type,
+            implode(', ', $expected),
+            $types ? implode(', ', $types) : '(none)',
+            self::summarize($missing),
+            self::summarize($extra)
+        ));
+    }
+
+    /**
+     * @param array<int, string> $items
+     * @return array<string, int> block type => count
+     */
+    private static function counts(array $items): array
+    {
+        $counts = [];
+        foreach ($items as $item) {
+            $counts[$item] = ($counts[$item] ?? 0) + 1;
+        }
+        return $counts;
+    }
+
+    /**
+     * @param array<string, int> $counts
+     */
+    private static function summarize(array $counts): string
+    {
+        if (empty($counts)) {
+            return '(none)';
+        }
+        $parts = [];
+        foreach ($counts as $type => $n) {
+            $parts[] = $n > 1 ? "{$type} x{$n}" : $type;
+        }
+        return implode(', ', $parts);
+    }
+
+    /**
      * Block types of the fixed rows, for error messages.
      *
      * @param array<int, array{type:string, attrs:array<string, mixed>, fixed:bool}> $rows

@@ -35,6 +35,11 @@ final class Plugin
         'ai-by-roadmap/rate-generation',
         'ai-by-roadmap/get-post-blocks',
         'ai-by-roadmap/set-block-image',
+        'ai-by-roadmap/update-block-fields',
+        'ai-by-roadmap/insert-block',
+        'ai-by-roadmap/remove-block',
+        'ai-by-roadmap/move-block',
+        'ai-by-roadmap/update-post',
     ];
 
     public const AI_CONTENT_FIELD = 'ai_content';
@@ -85,6 +90,11 @@ final class Plugin
         add_action('wp_abilities_api_init', [BlockAbilities\GetJobStatus::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetPostBlocks::class,      'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetBlockImage::class,      'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\UpdateBlockFields::class,  'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\InsertBlock::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\RemoveBlock::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\MoveBlock::class,          'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\UpdatePost::class,         'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetTargetAudience::class,  'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetTargetAudience::class,  'register']);
 

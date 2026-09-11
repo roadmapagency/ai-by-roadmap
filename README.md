@@ -252,16 +252,41 @@ For converting an external website page to a draft Roadmap Starter page, the can
 - **One LLM call per ~5 minutes max.** The SDK request timeout is 300s.
 - **The block catalogue is theme-dependent.** Don't hardcode `acf/hero` etc. — always discover via `list-blocks` first if you don't already know the active theme's blocks.
 - **`ai_content` on each block is the per-block source slice.** Do not overwrite it manually; it's how subsequent swaps stay accurate.
-- **Locked post types may contain fixed rows.** A rigid CPT's template can include rows that are not ACF blocks — typically a synced pattern (`core/block` with a `ref`) shared across every entry. `list-post-types` reports each template row with `fixed: true|false` and a separate `fillable_blocks` list. Supply only the fillable blocks to `assemble-page`, in order; the server inserts the fixed rows at their template positions (and `compose-page` does the same automatically when `post_id` belongs to a locked type). Passing a fixed row yourself is rejected. `get-post-blocks` / `set-block-image` skip fixed rows and index only the ACF blocks; the pattern's own content is edited once, in the pattern.
+- **Locked post types may contain fixed rows.** A rigid CPT's template can include rows that are not ACF blocks — typically a synced pattern (`core/block` with a `ref`) shared across every entry. `list-post-types` reports each template row with `fixed: true|false` and a separate `fillable_blocks` list. Supply only the fillable blocks to `assemble-page`, in order; the server inserts the fixed rows at their template positions (and `compose-page` does the same automatically when `post_id` belongs to a locked type). Passing a fixed row yourself is rejected. The pattern's own content is edited once, in the pattern.
+- **Two block counts, one index space.** `find-posts.block_count` (and `get-post-blocks.total_blocks`) count every named block, fixed rows included. Every `block_index` / `at_index` parameter, and `get-post-blocks.blocks[].index`, counts **ACF blocks only** — fixed rows are skipped and do not consume an index (`acf_block_count` / `acf_blocks`). `get-post-blocks` lists the skipped rows under `fixed_rows` so the two numbers reconcile.
+- **`assemble-page` will not overwrite a page that has content.** A `post_id` whose post already has blocks returns `post_not_empty` unless you pass `replace_content: true`. Edit existing pages with the block tools below instead.
+- **Structural edits respect the template lock.** `insert-block` / `remove-block` are refused on `template_lock: all` and `insert` types; `move-block` is refused only on `all`. `update-block-fields` works everywhere.
 - **Permission gates.** Most abilities require `edit_posts` (or `upload_files` for media, `manage_options` for admin operations like `reindex-media`). The MCP transport runs as the authenticated WP user.
 - **Vector search degrades gracefully** on MariaDB <11.7 to keyword-only. The API surface doesn't change, just the relevance.
 - **Generation log table is pruned daily** to ~1,000 most recent rows. Don't rely on old `id`s for `rate-generation` more than a few days after the run.
 
 ---
 
+## Maintaining an existing page (partial edits)
+
+The compose/assemble tools build whole pages. Once a page exists, change it with the partial-edit tools — they
+re-serialize only the block you touch and leave every other block byte-identical.
+
+1. `ai-by-roadmap/find-posts` with the route or title → `post_id`, `modified`, `acf_block_count`.
+2. `ai-by-roadmap/get-post-blocks` with `include_fields: true` (add `block_index` to fetch one block) → each block's
+   `index`, `block_type`, `label`, and `fields` in the same human shape `list-blocks` describes (repeaters as arrays of
+   rows, images as attachment IDs). `ai_content` is omitted unless `include_ai_content: true`.
+3. Pick the tool:
+   - **Copy / link / setting change** → `ai-by-roadmap/update-block-fields` with only the fields to change
+     (merge-patch; repeaters and groups are replaced whole). Unknown field names come back with the valid list.
+   - **Image swap** → `ai-by-roadmap/set-block-image` (top-level image fields) or `update-block-fields`.
+   - **Add / drop / reorder a section** → `insert-block`, `remove-block`, `move-block` (flexible post types only).
+   - **Title, slug, status, excerpt** → `ai-by-roadmap/update-post`.
+4. Pin the write: pass `expected_block_type` (from step 2) and `expected_modified` (from step 1 or 2). A reordered
+   block list or a concurrent edit returns a 409 instead of writing over it.
+
+Rich-text fields take inline HTML (`<p>`, `<strong>`, `<em>`) — never Markdown. Re-running the same patch is a no-op
+(`changed_fields: []`, no new revision).
+
+---
+
 ## When a skill should NOT use this plugin
 
-- **Pure copy-edit on existing post_content.** Use direct REST `update post` calls. The plugin's pipeline is overkill for editing already-structured blocks.
 - **Producing arbitrary block markup.** If you need a non-ACF block (core paragraph, image, columns), the plugin can't help — it only fills the registered ACF block schemas.
 - **Cross-site migration.** The plugin operates within one WordPress install. For "scrape site A → publish to site B", do the scraping yourself and only call this plugin for the publish leg on site B.
 
@@ -272,8 +297,19 @@ For converting an external website page to a draft Roadmap Starter page, the can
 | Ability | Purpose | Typical caller |
 |---|---|---|
 | `ai-by-roadmap/list-blocks` | Catalogue of registered ACF blocks | Discovery, once per migration |
+| `ai-by-roadmap/list-post-types` | Post types, rewrite slugs, locked templates + fixed rows | Choosing the destination type |
+| `ai-by-roadmap/find-posts` | Fuzzy-find existing posts (is_empty, block counts, modified) | Before every create/update |
 | `ai-by-roadmap/compose-page` | Full async pipeline → draft page | Per-page migration |
+| `ai-by-roadmap/assemble-page` | Persist blocks you filled yourself (no LLM); refuses non-empty posts | LLM-driven migration |
 | `ai-by-roadmap/get-job-status` | Poll compose-page result | Always paired with compose-page |
+| `ai-by-roadmap/get-post-blocks` | List a post's ACF blocks (+ `include_fields` for values) | Before any partial edit |
+| `ai-by-roadmap/update-block-fields` | Merge-patch fields on one block | Copy edits, link fixes |
+| `ai-by-roadmap/set-block-image` | Set a top-level image field on one block | Image swaps |
+| `ai-by-roadmap/insert-block` | Add a filled block at an index | Structural edits (unlocked types) |
+| `ai-by-roadmap/remove-block` | Remove a block by index | Structural edits (unlocked types) |
+| `ai-by-roadmap/move-block` | Reorder a block | Structural edits |
+| `ai-by-roadmap/update-post` | Title / slug / status / excerpt | Post metadata fixes |
+| `ai-by-roadmap/upload-media` | Sideload an image into the media library | Media import |
 | `ai-by-roadmap/analyze-content` | Section count + structure | Pre-pipeline diagnostic |
 | `ai-by-roadmap/choose-blocks` | Pick block list (no fill) | Custom pipelines |
 | `ai-by-roadmap/score-blocks` | Audit a block list | Custom pipelines / QA |

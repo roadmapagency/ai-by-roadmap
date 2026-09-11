@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
+use Roadmap\AiByRoadmap\Blocks\AcfBlockFields;
+use Roadmap\AiByRoadmap\Blocks\BlockPatcher;
 use WP_Error;
 
 /**
@@ -12,10 +14,10 @@ use WP_Error;
  * among the post's ACF blocks (see get-post-blocks) and the image field by name,
  * so blocks with more than one image field can be targeted precisely.
  *
- * v1 handles top-level image fields only; images nested inside repeaters or
- * groups are out of scope. Non-ACF rows (e.g. `core/block` synced patterns) are
- * skipped, do not consume an index, and survive the serialize_blocks() round-trip
- * untouched.
+ * A convenience wrapper over the same mechanics as update-block-fields (which
+ * can set images too, including inside repeaters). v1 handles top-level image
+ * fields only. Non-ACF rows (e.g. `core/block` synced patterns) are skipped, do
+ * not consume an index, and survive the serialize_blocks() round-trip untouched.
  */
 final class SetBlockImage
 {
@@ -27,16 +29,17 @@ final class SetBlockImage
             'meta'                => ['show_in_rest' => true],
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Set an image on a block', 'ai-by-roadmap'),
-            'description'         => __('Set an image field on a specific ACF block of a post to a media-library attachment, without changing any other content. Use get-post-blocks first to find block_index and the field name. Handles top-level image fields only.', 'ai-by-roadmap'),
+            'description'         => __('Set an image field on a specific ACF block of a post to a media-library attachment, without changing any other content. Use get-post-blocks first to find block_index and the field name. Handles top-level image fields only; for images inside repeaters use update-block-fields.', 'ai-by-roadmap'),
             'input_schema'        => [
                 'type'                 => 'object',
                 'additionalProperties' => false,
                 'required'             => ['post_id', 'block_index', 'field', 'attachment_id'],
                 'properties'           => [
-                    'post_id'       => ['type' => 'integer', 'description' => 'The post to update.'],
-                    'block_index'   => ['type' => 'integer', 'description' => 'Zero-based index among the post\'s ACF blocks, as returned by get-post-blocks.'],
-                    'field'         => ['type' => 'string', 'description' => 'The image field name to set (e.g. "image" or "image_circle").'],
-                    'attachment_id' => ['type' => 'integer', 'description' => 'The media-library attachment ID to place in the field.'],
+                    'post_id'           => ['type' => 'integer', 'description' => 'The post to update.'],
+                    'block_index'       => ['type' => 'integer', 'description' => 'Zero-based index among the post\'s ACF blocks, as returned by get-post-blocks.'],
+                    'field'             => ['type' => 'string', 'description' => 'The image field name to set (e.g. "image" or "image_circle").'],
+                    'attachment_id'     => ['type' => 'integer', 'description' => 'The media-library attachment ID to place in the field.'],
+                    'expected_modified' => ['type' => 'string', 'description' => 'Optional: the post\'s modified value from get-post-blocks/find-posts. The write is refused if the post changed since.'],
                 ],
             ],
             'output_schema'       => [
@@ -50,6 +53,7 @@ final class SetBlockImage
                     'field'         => ['type' => 'string'],
                     'attachment_id' => ['type' => 'integer'],
                     'image_url'     => ['type' => 'string'],
+                    'modified'      => ['type' => 'string'],
                     'edit_link'     => ['type' => 'string'],
                 ],
             ],
@@ -73,25 +77,21 @@ final class SetBlockImage
         if (! $post) {
             return new WP_Error('post_not_found', __('Post not found.', 'ai-by-roadmap'), ['status' => 404]);
         }
+        if (! current_user_can('edit_post', $post_id)) {
+            return new WP_Error('forbidden', __('You are not allowed to edit this post.', 'ai-by-roadmap'), ['status' => 403]);
+        }
+
+        $guard = BlockPatcher::check_modified($post, isset($input['expected_modified']) ? (string) $input['expected_modified'] : null);
+        if (is_wp_error($guard)) {
+            return $guard;
+        }
 
         if (! wp_attachment_is_image($attachment_id)) {
             return new WP_Error('invalid_attachment', __('attachment_id is not an image attachment.', 'ai-by-roadmap'), ['status' => 400]);
         }
 
-        $blocks   = parse_blocks((string) $post->post_content);
-        $acf_seen = 0;
-        $target   = null;
-
-        foreach ($blocks as $i => $block) {
-            if (! str_starts_with((string) ($block['blockName'] ?? ''), 'acf/')) {
-                continue;
-            }
-            if ($acf_seen === $block_index) {
-                $target = $i;
-                break;
-            }
-            $acf_seen++;
-        }
+        $blocks = parse_blocks((string) $post->post_content);
+        $target = BlockPatcher::locate($blocks, $block_index);
 
         if ($target === null) {
             return new WP_Error('block_not_found', sprintf(
@@ -102,7 +102,7 @@ final class SetBlockImage
         }
 
         $block_name   = (string) $blocks[$target]['blockName'];
-        $image_fields = self::image_field_names($block_name);
+        $image_fields = array_keys(AcfBlockFields::image_fields($block_name));
 
         if (! in_array($field, $image_fields, true)) {
             return new WP_Error('invalid_field', sprintf(
@@ -119,19 +119,13 @@ final class SetBlockImage
         $blocks[$target]['attrs']['data'][$field] = $attachment_id;
         $ref_key = '_' . $field;
         if (empty($blocks[$target]['attrs']['data'][$ref_key])) {
-            $block_slug = str_replace('acf/', '', $block_name);
-            $blocks[$target]['attrs']['data'][$ref_key] = 'field_' . $block_slug . '_' . $field;
+            $def = AcfBlockFields::find(AcfBlockFields::definitions($block_name), $field);
+            $blocks[$target]['attrs']['data'][$ref_key] = $def['key'] ?? ('field_' . str_replace('acf/', '', $block_name) . '_' . $field);
         }
 
-        $content = serialize_blocks($blocks);
-
-        $result = wp_update_post([
-            'ID'           => $post_id,
-            'post_content' => wp_slash($content),
-        ], true);
-
-        if (is_wp_error($result)) {
-            return $result;
+        $modified = BlockPatcher::save($post_id, $blocks);
+        if (is_wp_error($modified)) {
+            return $modified;
         }
 
         return [
@@ -141,30 +135,8 @@ final class SetBlockImage
             'field'         => $field,
             'attachment_id' => $attachment_id,
             'image_url'     => (string) wp_get_attachment_url($attachment_id),
+            'modified'      => $modified,
             'edit_link'     => (string) get_edit_post_link($post_id, 'raw'),
         ];
-    }
-
-    /**
-     * Top-level image field names for a block type, via ACF introspection.
-     *
-     * @return array<int, string>
-     */
-    private static function image_field_names(string $block_name): array
-    {
-        if (! function_exists('acf_get_field_groups') || ! function_exists('acf_get_fields')) {
-            return [];
-        }
-
-        $names = [];
-        foreach (acf_get_field_groups(['block' => $block_name]) as $group) {
-            foreach ((array) acf_get_fields($group) as $field) {
-                if (($field['type'] ?? '') === 'image') {
-                    $names[] = (string) $field['name'];
-                }
-            }
-        }
-
-        return $names;
     }
 }
