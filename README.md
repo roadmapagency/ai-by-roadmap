@@ -54,10 +54,19 @@ Our abilities set `meta.mcp.public = true` (via `Plugin::ability_meta()`), so th
 too; the fine-grained pipeline abilities (`fill-block`, `choose-blocks`, …) are deliberately REST-only. The tool list on
 our server is filterable with `ai_by_roadmap_mcp_tools`.
 
-**SEO is Yoast's job.** Do not look for SEO title / meta description / keyphrase tools here — Yoast's abilities cover
-them and are bridged into our server. They exist only when Yoast's indexables are enabled: a site whose home URL
-changed (typical for a local clone) has indexing disabled and registers none. Check `wp yoast index --help` / the
-`indexing_reason` option on production before relying on them.
+**SEO.** Post-level SEO data lives in Yoast SEO. Three of our tools read and write it through Yoast's own API so
+agents can do the pre-launch SEO pass: `ai-by-roadmap/get-post-seo`, `update-post-seo` (seo_title,
+meta_description, focus_keyphrase, canonical, noindex/nofollow, Open Graph / Twitter overrides, cornerstone) and
+`audit-seo` (site-wide work list: missing/too-long descriptions, long titles, missing keyphrases, noindex, duplicates).
+Field names match Yoast's own forthcoming `yoast-seo/get-post-seo-data` / `update-post-seo-data` abilities, which are
+bridged into our server the moment Yoast registers them.
+
+Yoast registers its abilities — and builds the indexables its scores need — **only when `WP_ENVIRONMENT_TYPE` is
+`production`**. For local/staging SEO work, drop a must-use plugin that returns true for the
+`Yoast\WP\SEO\should_index_indexables` filter on non-production environments (see
+`wp-content/mu-plugins/local-yoast-indexables.php` on The Newly dev site), then run **SEO → Tools → Optimize SEO
+data** once so scores exist. Yoast's `get-seo-scores` / `get-readability-scores` / `get-inclusive-language-scores`
+then appear as bridged tools.
 
 ---
 
@@ -338,8 +347,9 @@ pattern's `ref` id as `post_id`.
 3. **Link it**: `ai-by-roadmap/get-navigation` shows every menu and the megamenu; `add-menu-item` (footer / menus)
    and `update-mega-nav` (header panels) put the page where people will find it. Internal URLs are relative paths.
 4. **Media**: `search-media` / `upload-media` for images, `update-media` for alt text.
-5. **Review**: `render-block` / `get-preview-link`, then `update-post` `status: publish`. SEO title and description
-   are Yoast's `update-post-seo-data` when available.
+5. **SEO**: `get-post-seo` → `update-post-seo` (title, meta description, focus keyphrase); `audit-seo` for the whole
+   site before launch.
+6. **Review**: `render-block` / `get-preview-link`, then `update-post` `status: publish`.
 
 ---
 
@@ -382,6 +392,9 @@ pattern's `ref` id as `post_id`.
 | `ai-by-roadmap/update-mega-nav` | Edit a megamenu panel (ACF option) | Header navigation |
 | `ai-by-roadmap/upload-media` | Sideload an image into the media library | Media import |
 | `ai-by-roadmap/update-media` | Alt text / title / caption / description | Accessibility fixes |
+| `ai-by-roadmap/get-post-seo` | One post's Yoast SEO data, rendered output, scores, issues | SEO review |
+| `ai-by-roadmap/update-post-seo` | Write Yoast SEO fields (title, description, keyphrase, robots, social) | SEO fixes |
+| `ai-by-roadmap/audit-seo` | Site-wide SEO work list | Pre-launch SEO sweep |
 | `core/get-site-info`, `yoast-seo/*` | Bridged from core / Yoast when registered | Site facts, SEO scores & post SEO data |
 | `ai-by-roadmap/analyze-content` | Section count + structure | Pre-pipeline diagnostic |
 | `ai-by-roadmap/choose-blocks` | Pick block list (no fill) | Custom pipelines |

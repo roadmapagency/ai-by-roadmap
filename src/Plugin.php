@@ -54,6 +54,9 @@ final class Plugin
         'ai-by-roadmap/get-navigation',
         'ai-by-roadmap/add-menu-item',
         'ai-by-roadmap/update-mega-nav',
+        'ai-by-roadmap/get-post-seo',
+        'ai-by-roadmap/update-post-seo',
+        'ai-by-roadmap/audit-seo',
     ];
 
     public const AI_CONTENT_FIELD = 'ai_content';
@@ -151,6 +154,9 @@ final class Plugin
         add_action('wp_abilities_api_init', [CoreAbilities\GetNavigation::class,       'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\AddMenuItem::class,         'register']);
         add_action('wp_abilities_api_init', [CoreAbilities\UpdateMegaNav::class,       'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\GetPostSeo::class,          'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\UpdatePostSeo::class,       'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\AuditSeo::class,            'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetTargetAudience::class,  'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetTargetAudience::class,  'register']);
 
