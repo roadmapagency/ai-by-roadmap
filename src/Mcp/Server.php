@@ -71,10 +71,10 @@ final class Server
      */
     public static function tools(): array
     {
-        $bridged = array_values(array_filter(
-            self::BRIDGED_ABILITIES,
-            static fn(string $name): bool => function_exists('wp_get_ability') && wp_get_ability($name) !== null
-        ));
+        // wp_get_ability() raises _doing_it_wrong() for an unknown name, so
+        // check the registry's key list instead of probing one by one.
+        $registered = function_exists('wp_get_abilities') ? array_keys(wp_get_abilities()) : [];
+        $bridged    = array_values(array_intersect(self::BRIDGED_ABILITIES, $registered));
 
         /**
          * Filters the ability names exposed as tools on the ai-by-roadmap MCP server.
