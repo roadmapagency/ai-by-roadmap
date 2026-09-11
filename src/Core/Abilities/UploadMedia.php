@@ -22,7 +22,7 @@ final class UploadMedia
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, false),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Upload an image to the media library', 'ai-by-roadmap'),
             'description'         => __('Upload an image into the WordPress media library from a remote URL or a local file path on the server, and return the new attachment ID. SEO metadata and alt text are generated automatically in the background. Provide exactly one of "url" or "path". Base64 is not supported.', 'ai-by-roadmap'),

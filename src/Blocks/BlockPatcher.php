@@ -187,6 +187,103 @@ final class BlockPatcher
     }
 
     /**
+     * Merge-patch a block's flat ACF data with human-shaped field values.
+     * Repeaters and groups named in $fields are replaced whole (their old
+     * flattened rows are stripped first); everything else is merged key by
+     * key. Returns the new data plus which supplied fields actually changed,
+     * compared in unflattened form so "1" vs 1 is not a change.
+     *
+     * This is THE merge path — update-block-fields, update-blocks,
+     * replace-text and audit-links all go through it.
+     *
+     * @param array<string, mixed>             $data   Current attrs.data.
+     * @param array<int, array<string, mixed>> $defs   AcfBlockFields::definitions().
+     * @param array<string, mixed>             $fields Patch, by schema field name.
+     * @return array{data: array<string, mixed>, changed: array<int, string>, unchanged: array<int, string>}
+     */
+    public static function patch_data(string $block_type, array $data, array $defs, array $fields): array
+    {
+        $patch = (new ACFTransformer())->flatten($block_type, $fields);
+        $new   = $data;
+
+        // Repeaters/groups: swap the field's old flattened keys for the new
+        // ones IN PLACE, so key order (and therefore the serialized JSON) stays
+        // as close to the original as possible.
+        foreach (array_keys($fields) as $name) {
+            $def = AcfBlockFields::find($defs, (string) $name);
+            if (! $def || ! in_array($def['type'], ['repeater', 'group'], true)) {
+                continue;
+            }
+            $owned_new = array_diff_key($patch, AcfBlockFields::strip_field($patch, $def));
+            $patch     = array_diff_key($patch, $owned_new);
+            $stripped  = AcfBlockFields::strip_field($new, $def);
+            $owned_old = array_diff_key($new, $stripped);
+
+            // Unflattened rows carry every sub-field, including ones the block
+            // never stored. Don't invent empty keys the original did not have —
+            // it keeps the serialized block minimal and diffs quiet. A key that
+            // WAS stored is kept even when emptied (that is a real change).
+            foreach ($owned_new as $key => $value) {
+                $key = (string) $key;
+                if ($key[0] === '_' || array_key_exists($key, $owned_old)) {
+                    continue;
+                }
+                if ($value === '' || $value === null || $value === []) {
+                    unset($owned_new[$key], $owned_new['_' . $key]);
+                }
+            }
+
+            if ($owned_old === []) {
+                $new = array_merge($stripped, $owned_new);
+                continue;
+            }
+            $rebuilt  = [];
+            $inserted = false;
+            foreach ($new as $key => $value) {
+                if (array_key_exists($key, $owned_old)) {
+                    if (! $inserted) {
+                        $rebuilt  = array_merge($rebuilt, $owned_new);
+                        $inserted = true;
+                    }
+                    continue;
+                }
+                $rebuilt[$key] = $value;
+            }
+            $new = $rebuilt;
+        }
+
+        // Scalars: array_merge keeps an existing key's position and appends new
+        // ones — except empty values for keys the block never stored (same rule
+        // as above: never invent empty keys).
+        foreach ($patch as $key => $value) {
+            $key = (string) $key;
+            if ($key[0] !== '_' && ! array_key_exists($key, $new) && ($value === '' || $value === null || $value === [])) {
+                unset($patch[$key], $patch['_' . $key]);
+            }
+        }
+        $new = array_merge($new, $patch);
+
+        $changed   = [];
+        $unchanged = [];
+        foreach (array_keys($fields) as $name) {
+            $def = AcfBlockFields::find($defs, (string) $name);
+            if ($def === null) {
+                $changed[] = (string) $name;
+                continue;
+            }
+            $before = wp_json_encode(AcfBlockFields::unflatten($data, [$def]));
+            $after  = wp_json_encode(AcfBlockFields::unflatten($new, [$def]));
+            if ($before === $after) {
+                $unchanged[] = (string) $name;
+            } else {
+                $changed[] = (string) $name;
+            }
+        }
+
+        return ['data' => $new, 'changed' => $changed, 'unchanged' => $unchanged];
+    }
+
+    /**
      * Post modified stamp in the format find-posts / get-post-blocks return.
      */
     public static function modified(WP_Post $post): string
@@ -256,6 +353,8 @@ final class BlockPatcher
     {
         $content = serialize_blocks($blocks);
 
+        self::ensure_undo_point($post_id);
+
         // wp_update_post() runs wp_unslash() on input; slash so ACF's
         // <-escaped block attributes survive intact.
         $result = wp_update_post([
@@ -271,6 +370,23 @@ final class BlockPatcher
         $post = get_post($post_id);
 
         return $post ? self::modified($post) : '';
+    }
+
+    /**
+     * WordPress snapshots a post AFTER each save, so a post that has never had
+     * a revision loses its pre-edit state on the first agent write. Take that
+     * snapshot first when none exists, so restore-revision can always undo the
+     * first edit too.
+     */
+    public static function ensure_undo_point(int $post_id): void
+    {
+        $post = get_post($post_id);
+        if (! $post || ! post_type_supports((string) $post->post_type, 'revisions')) {
+            return;
+        }
+        if (wp_get_post_revisions($post_id, ['posts_per_page' => 1, 'fields' => 'ids']) === []) {
+            wp_save_post_revision($post_id);
+        }
     }
 
     /**

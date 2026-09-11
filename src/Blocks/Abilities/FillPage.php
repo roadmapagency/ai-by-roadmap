@@ -20,7 +20,7 @@ final class FillPage
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Fill a page of blocks', 'ai-by-roadmap'),
             'description'         => __('Given a chosen block list and source content, fill every block in a single LLM call and return the serialized ACF block markup.', 'ai-by-roadmap'),

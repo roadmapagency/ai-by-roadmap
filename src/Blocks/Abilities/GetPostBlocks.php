@@ -31,7 +31,7 @@ final class GetPostBlocks
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('List a post\'s blocks and their fields', 'ai-by-roadmap'),
             'description'         => __('List the ACF blocks on a post in order — the discovery step before any partial edit. Each entry has index, block_type, label (its heading or other identifying text) and image_fields. Pass include_fields: true to also get every field\'s current value (fields object, human field names, repeaters as arrays of rows, images as attachment IDs) and block_index to return a single block. The index counts ACF blocks only: fixed rows such as synced patterns are skipped (see fixed_rows), which is why find-posts block_count can exceed acf_blocks. Pass the returned index as block_index to update-block-fields / set-block-image / remove-block / move-block, and the returned modified as expected_modified to guard against concurrent edits.', 'ai-by-roadmap'),

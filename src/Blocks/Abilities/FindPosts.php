@@ -24,7 +24,7 @@ final class FindPosts
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Find existing posts', 'ai-by-roadmap'),
             'description'         => __('Find existing posts before deciding whether to create or update. Pass the source doc\'s route, slug, or title as "query"; results are returned as ranked candidates (match_score 0–1), NOT exact matches — review them and judge whether any is the page you mean, since slugs/titles often differ slightly. Imports often leave empty placeholder drafts (is_empty:true) that should be filled rather than duplicated: to fill one, call assemble-page with its post_id. Only create a new page when no candidate fits. A page with is_empty:false already has content — edit it with get-post-blocks (include_fields: true) + update-block-fields / insert-block / remove-block / move-block rather than rebuilding it; assemble-page refuses such posts unless replace_content is true. block_count counts every block incl. fixed rows (synced patterns); acf_block_count is the number of editable ACF blocks, i.e. the index space of the block tools.', 'ai-by-roadmap'),

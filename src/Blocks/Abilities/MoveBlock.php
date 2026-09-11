@@ -20,7 +20,7 @@ final class MoveBlock
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Move a block within a post', 'ai-by-roadmap'),
             'description'         => __('Move one ACF block to a new position in an existing post, leaving every block\'s content untouched. Indices are the ACF indices from get-post-blocks: from_index is the block to move, to_index is the index it should have AFTER the move. Pass expected_block_type as a guard. Not allowed when the post type\'s template_lock is "all". Returns the new block list.', 'ai-by-roadmap'),

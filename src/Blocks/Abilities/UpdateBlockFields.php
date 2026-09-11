@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
 use Roadmap\AiByRoadmap\Blocks\AcfBlockFields;
-use Roadmap\AiByRoadmap\Blocks\ACFTransformer;
 use Roadmap\AiByRoadmap\Blocks\BlockPatcher;
 use WP_Error;
 
@@ -30,7 +29,7 @@ final class UpdateBlockFields
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Update fields on one block', 'ai-by-roadmap'),
             'description'         => __('Change one or more fields on a single ACF block of an existing post, leaving every other field and block untouched (merge-patch). Workflow: find-posts → get-post-blocks with include_fields: true to see the block_index, the field names and current values → call this with only the fields to change. Use the schema field names from list-blocks/get-post-blocks (e.g. heading, intro, primary_button_url) — an unknown name returns the valid list. Rich-text fields take inline HTML (<p>, <strong>, <em>), never Markdown; images take attachment IDs; repeaters take the full array of rows and are replaced whole. Pass expected_block_type and expected_modified (from get-post-blocks) so the write is refused if the blocks moved or the post changed in between. ai_content is only touched if you include it.', 'ai-by-roadmap'),
@@ -133,33 +132,10 @@ final class UpdateBlockFields
             return $valid;
         }
 
-        $old_data = (array) ($blocks[$target]['attrs']['data'] ?? []);
-        $new_data = $old_data;
-
-        // Repeaters/groups are replaced whole: clear their flattened rows first
-        // so a shorter new list cannot leave stale rows behind.
-        foreach (array_keys($fields) as $name) {
-            $def = AcfBlockFields::find($defs, (string) $name);
-            if ($def && in_array($def['type'], ['repeater', 'group'], true)) {
-                $new_data = AcfBlockFields::strip_field($new_data, $def);
-            }
-        }
-
-        $patch    = (new ACFTransformer())->flatten($block_type, $fields);
-        $new_data = array_merge($new_data, $patch);
-
-        $changed   = [];
-        $unchanged = [];
-        foreach (array_keys($fields) as $name) {
-            $def    = AcfBlockFields::find($defs, (string) $name);
-            $before = wp_json_encode(AcfBlockFields::unflatten($old_data, [$def]));
-            $after  = wp_json_encode(AcfBlockFields::unflatten($new_data, [$def]));
-            if ($before === $after) {
-                $unchanged[] = (string) $name;
-            } else {
-                $changed[] = (string) $name;
-            }
-        }
+        $patched   = BlockPatcher::patch_data($block_type, (array) ($blocks[$target]['attrs']['data'] ?? []), $defs, $fields);
+        $new_data  = $patched['data'];
+        $changed   = $patched['changed'];
+        $unchanged = $patched['unchanged'];
 
         $result = [
             'success'             => true,

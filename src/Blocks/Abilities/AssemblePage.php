@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Blocks\Abilities;
 
+use Roadmap\AiByRoadmap\Blocks\AcfBlockFields;
 use Roadmap\AiByRoadmap\Blocks\ACFTransformer;
 use Roadmap\AiByRoadmap\Blocks\BlockPatcher;
 use Roadmap\AiByRoadmap\Blocks\BlockRegistry;
@@ -27,7 +28,7 @@ final class AssemblePage
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, true, false),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Assemble a page from filled blocks', 'ai-by-roadmap'),
             'description'         => __('Assemble and persist a WordPress page from blocks you have already filled yourself — no AI is called. Use this when an LLM is driving the MCP: call list-blocks to learn each block\'s field schema, fill the fields yourself, then pass the ordered list of {type, fields} here. The blocks are serialized to ACF markup and saved: provide post_id to update an existing page (e.g. an empty placeholder found via find-posts), or omit it to create a new draft. Call find-posts first to decide whether a matching page already exists rather than duplicating it. Choose the destination with list-post-types: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → post_type "program", not the generic "page"); when that type has a locked template, supply your blocks in that exact order and of those exact types — this is enforced server-side, and a mismatch returns an error telling you exactly what to fix. list-post-types marks some template rows fixed:true (e.g. synced patterns, core/block): never include those in blocks — supply only the fillable_blocks, in order, and the server inserts the fixed rows at their template positions. For rich-text fields (schema format "html"), write HTML inline tags (<strong>, <em>) — never Markdown. This tool builds whole pages: to change copy or structure on a page that already has blocks, use get-post-blocks (include_fields: true) with update-block-fields, insert-block, remove-block or move-block instead — a non-empty post is refused here unless replace_content is true. Prefer compose-page only when you have raw content and no model to do the analyse/choose/fill work.', 'ai-by-roadmap'),
@@ -74,6 +75,11 @@ final class AssemblePage
                         'type'        => 'string',
                         'description' => 'Post type for the new page when post_id is omitted. Defaults to "page". Use list-post-types and match the source route to a type\'s rewrite_slug (e.g. "program" for a /programs/… route).',
                     ],
+                    'dry_run'         => [
+                        'type'        => 'boolean',
+                        'default'     => false,
+                        'description' => 'Validate and serialize only — nothing is written. Returns the same errors a real call would (unknown fields, invalid choices, bad attachment IDs, template mismatch) or valid: true with the serialized blocks. Use it to check a large page before committing.',
+                    ],
                 ],
             ],
             'output_schema'       => [
@@ -87,6 +93,10 @@ final class AssemblePage
                     ],
                     'post_id'   => ['type' => 'integer'],
                     'edit_link' => ['type' => 'string'],
+                    'dry_run'   => ['type' => 'boolean'],
+                    'valid'     => ['type' => 'boolean'],
+                    'operation' => ['type' => 'string', 'enum' => ['create', 'update']],
+                    'post_type' => ['type' => 'string'],
                 ],
             ],
             'permission_callback' => static fn(): bool => current_user_can('edit_posts'),
@@ -175,6 +185,23 @@ final class AssemblePage
             $fields = (array) ($block['fields'] ?? []);
             $fields[Plugin::AI_CONTENT_FIELD] = (string) ($fields[Plugin::AI_CONTENT_FIELD] ?? '');
 
+            // Validate field names, choices, attachment IDs and repeater shapes
+            // against the live ACF definitions before anything is persisted.
+            $defs = AcfBlockFields::definitions($type);
+            if ($defs !== []) {
+                $valid = AcfBlockFields::validate($fields, $defs, $type);
+                if (is_wp_error($valid)) {
+                    $valid->add_data(['status' => 400, 'block_position' => count($types) - 1]);
+                    return new \WP_Error($valid->get_error_code(), sprintf(
+                        /* translators: 1: zero-based block position, 2: block type, 3: validation message */
+                        __('blocks[%1$d] (%2$s): %3$s', 'ai-by-roadmap'),
+                        count($types) - 1,
+                        $type,
+                        $valid->get_error_message()
+                    ), $valid->get_error_data());
+                }
+            }
+
             $serialized[] = $transformer->convert([$type => $fields]);
         }
 
@@ -193,6 +220,18 @@ final class AssemblePage
 
         $result   = ['blocks' => $serialized];
         $content  = implode("\n\n", $serialized);
+
+        // Dry run: everything validated and serialized, nothing written.
+        if (! empty($input['dry_run'])) {
+            $result['dry_run']   = true;
+            $result['valid']     = true;
+            $result['operation'] = $post_id ? 'update' : 'create';
+            $result['post_type'] = $target_type;
+            if ($post_id) {
+                $result['post_id'] = $post_id;
+            }
+            return $result;
+        }
 
         if ($post_id) {
             $updated = wp_update_post([

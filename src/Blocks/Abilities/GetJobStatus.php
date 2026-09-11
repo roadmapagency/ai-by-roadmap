@@ -13,7 +13,7 @@ final class GetJobStatus
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Get compose-page job status', 'ai-by-roadmap'),
             'description'         => __('Poll for the status of an async page-composition job. Returns the current status (queued, running, done, failed) plus the result payload once finished.', 'ai-by-roadmap'),

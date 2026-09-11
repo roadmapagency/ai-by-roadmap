@@ -17,7 +17,7 @@ final class GetTargetAudience
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Get target audience for a post', 'ai-by-roadmap'),
             'description'         => __('Retrieve the stored target-audience description for a post. Returns an empty string if none is set.', 'ai-by-roadmap'),

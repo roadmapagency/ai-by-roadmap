@@ -18,7 +18,7 @@ final class ComposePage
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Compose a full page from source content', 'ai-by-roadmap'),
             'description'         => __('Run the full analyze → choose → score → fill → transform pipeline asynchronously. Returns a job_id immediately; poll get-job-status to retrieve the serialized blocks once the pipeline completes.', 'ai-by-roadmap'),

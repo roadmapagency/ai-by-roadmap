@@ -20,7 +20,7 @@ final class FillBlock
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Fill a single block', 'ai-by-roadmap'),
             'description'         => __('Generate one ACF block from source content. Returns both the JSON field data and the serialized ACF block markup ready to insert into post_content.', 'ai-by-roadmap'),

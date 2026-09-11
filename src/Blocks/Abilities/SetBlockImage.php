@@ -26,7 +26,7 @@ final class SetBlockImage
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Set an image on a block', 'ai-by-roadmap'),
             'description'         => __('Set an image field on a specific ACF block of a post to a media-library attachment, without changing any other content. Use get-post-blocks first to find block_index and the field name. Handles top-level image fields only; for images inside repeaters use update-block-fields.', 'ai-by-roadmap'),

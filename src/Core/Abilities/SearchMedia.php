@@ -22,7 +22,7 @@ final class SearchMedia
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Search the media library', 'ai-by-roadmap'),
             'description'         => __('Find images in the media library by natural-language description. Returns up to N candidate attachments with IDs, titles, descriptions, and suggested usage.', 'ai-by-roadmap'),

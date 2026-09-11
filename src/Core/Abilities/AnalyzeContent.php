@@ -13,7 +13,7 @@ final class AnalyzeContent
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Analyze content structure', 'ai-by-roadmap'),
             'description'         => __('Read raw website content and report its section count + a short description per section. Useful as a structured pre-step before page composition.', 'ai-by-roadmap'),

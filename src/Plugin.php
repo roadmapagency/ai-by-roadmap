@@ -40,11 +40,53 @@ final class Plugin
         'ai-by-roadmap/remove-block',
         'ai-by-roadmap/move-block',
         'ai-by-roadmap/update-post',
+        'ai-by-roadmap/get-preview-link',
+        'ai-by-roadmap/render-block',
+        'ai-by-roadmap/resolve-link',
+        'ai-by-roadmap/audit-links',
+        'ai-by-roadmap/search-content',
+        'ai-by-roadmap/replace-text',
+        'ai-by-roadmap/list-revisions',
+        'ai-by-roadmap/restore-revision',
+        'ai-by-roadmap/update-blocks',
+        'ai-by-roadmap/duplicate-post',
+        'ai-by-roadmap/update-media',
+        'ai-by-roadmap/get-navigation',
+        'ai-by-roadmap/add-menu-item',
+        'ai-by-roadmap/update-mega-nav',
     ];
 
     public const AI_CONTENT_FIELD = 'ai_content';
 
     private static ?self $instance = null;
+
+    /**
+     * Standard `meta` for an ability registration.
+     *
+     * - show_in_rest: callable via core's wp-abilities/v1 REST routes.
+     * - annotations: MCP tool hints (readOnlyHint / destructiveHint /
+     *   idempotentHint) so clients can ask before destructive calls.
+     * - mcp.public: discoverable and executable on the MCP Adapter's
+     *   generic default server (discover-abilities / execute-ability).
+     *   Fine-grained pipeline abilities pass false so they stay REST-only;
+     *   everything in PUBLIC_ABILITIES should pass true.
+     *
+     * @return array<string, mixed>
+     */
+    public static function ability_meta(bool $readonly, bool $destructive = false, bool $idempotent = true, bool $mcp_public = true): array
+    {
+        return [
+            'show_in_rest' => true,
+            'annotations'  => [
+                'readonly'    => $readonly,
+                'destructive' => $destructive,
+                'idempotent'  => $idempotent,
+            ],
+            'mcp'          => [
+                'public' => $mcp_public,
+            ],
+        ];
+    }
 
     public static function instance(): self
     {
@@ -95,6 +137,20 @@ final class Plugin
         add_action('wp_abilities_api_init', [BlockAbilities\RemoveBlock::class,        'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\MoveBlock::class,          'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\UpdatePost::class,         'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\GetPreviewLink::class,     'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\RenderBlock::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\ResolveLink::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\AuditLinks::class,         'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\SearchContent::class,      'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\ReplaceText::class,        'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\ListRevisions::class,      'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\RestoreRevision::class,    'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\UpdateBlocks::class,       'register']);
+        add_action('wp_abilities_api_init', [BlockAbilities\DuplicatePost::class,      'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\UpdateMedia::class,         'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\GetNavigation::class,       'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\AddMenuItem::class,         'register']);
+        add_action('wp_abilities_api_init', [CoreAbilities\UpdateMegaNav::class,       'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\GetTargetAudience::class,  'register']);
         add_action('wp_abilities_api_init', [BlockAbilities\SetTargetAudience::class,  'register']);
 
