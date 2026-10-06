@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       AI by Roadmap
  * Description:       Surfaces ACF blocks, image search, and content-generation pipelines to LLMs through the WordPress Abilities API.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires PHP:      8.1
  * Requires at least: 6.9
  * Author:            Roadmap Agency Inc.
@@ -18,7 +18,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-const VERSION    = '0.1.0';
+const VERSION    = '0.2.0';
 const PLUGIN_DIR = __DIR__;
 const PLUGIN_URL_BASE = __FILE__;
 
