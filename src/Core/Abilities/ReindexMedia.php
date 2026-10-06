@@ -19,7 +19,7 @@ final class ReindexMedia
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, false, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Reindex media embeddings', 'ai-by-roadmap'),
             'description'         => __('Generate vector embeddings for every analysed image that does not have one yet. Skipped automatically if the database does not support VECTOR columns.', 'ai-by-roadmap'),

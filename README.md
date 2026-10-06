@@ -2,10 +2,11 @@
 
 A WordPress plugin that exposes a curated set of **Abilities API** capabilities for assembling and editing pages of ACF Gutenberg blocks. Designed to be driven by LLMs (Claude Desktop, Claude Code, or any MCP client) for tasks like **migrating an external website's content into the Roadmap Starter theme**, but every ability is also callable via the standard WordPress REST API for in-editor UIs and scripted batch runs.
 
-The same abilities are surfaced via two transports — input shape, output shape, and behaviour are identical between them:
+The same abilities are surfaced via three transports — input shape, output shape, and behaviour are identical between them (see [How agents connect](#how-agents-connect)):
 
 - **REST API:** `POST /wp-abilities/v1/abilities/{name}/run`
-- **MCP:** `ai-by-roadmap-mcp` custom server registered via the WordPress MCP Adapter.
+- **MCP (recommended):** the `ai-by-roadmap-mcp` server at `/wp-json/ai-by-roadmap/mcp`, which also bridges Yoast SEO and core abilities.
+- **MCP (generic):** the MCP Adapter's default server at `/wp-json/mcp/mcp-adapter-default-server`.
 
 This README is also the operational manual for any **Claude skill** that drives the plugin. The sections below mirror what a skill needs to know: how to discover the active block catalogue, the recommended workflow for converting raw content to a draft page, and the input/output shapes for every ability.
 
@@ -33,6 +34,39 @@ API credentials for the underlying LLM provider are managed by the shared WordPr
 The plugin creates three tables on activation: `{prefix}ai_generation_log`, `{prefix}ai_by_roadmap_jobs`, and (only on MariaDB 11.7+) `{prefix}ai_image_embeddings`. A daily WP-Cron job prunes the generation log to ~1,000 most recent rows.
 
 The active theme contributes its block schemas via the `ai_by_roadmap_register_block` filter; without that wiring, `list-blocks` will return an empty catalogue. The Roadmap Starter theme already does this in [acf-blocks/AIForGutenbergProvider.php](../../themes/roadmap-starter/acf-blocks/AIForGutenbergProvider.php).
+
+---
+
+## How agents connect
+
+WordPress core does **not** ship an MCP server. It ships the **Abilities API** (WordPress 6.9+): a registry every plugin
+registers into with `wp_register_ability()`, plus REST routes to list and run them. MCP is layered on top by the
+separate **MCP Adapter** plugin. That gives three ways in — all authenticate as a normal WordPress user (login cookie or
+an Application Password), and an ability's own `permission_callback` applies on every path.
+
+| Path | Endpoint | What an agent sees | Use it when |
+|---|---|---|---|
+| **Core REST** | `GET /wp-json/wp-abilities/v1/abilities`, `POST …/abilities/{name}/run` | Every ability with `show_in_rest` | Scripts, in-editor UIs, curl |
+| **Our MCP server** (recommended) | `/wp-json/ai-by-roadmap/mcp` | Our public abilities as first-class tools with full schemas and workflow descriptions, **plus** bridged tools from other plugins when they are registered: `core/get-site-info`, Yoast's `yoast-seo/get-seo-scores`, `get-readability-scores`, `get-inclusive-language-scores`, and `get-/update-post-seo-data` once Yoast ships them | Any LLM agent driving this site |
+| **Adapter default server** (generic) | `/wp-json/mcp/mcp-adapter-default-server` | Three meta-tools only — `discover-abilities`, `get-ability-info`, `execute-ability` — over every ability flagged `meta.mcp.public`, from any plugin | A client that must work on any WordPress site without knowing its plugins |
+
+Our abilities set `meta.mcp.public = true` (via `Plugin::ability_meta()`), so they are reachable on the generic server
+too; the fine-grained pipeline abilities (`fill-block`, `choose-blocks`, …) are deliberately REST-only. The tool list on
+our server is filterable with `ai_by_roadmap_mcp_tools`.
+
+**SEO.** Post-level SEO data lives in Yoast SEO. Three of our tools read and write it through Yoast's own API so
+agents can do the pre-launch SEO pass: `ai-by-roadmap/get-post-seo`, `update-post-seo` (seo_title,
+meta_description, focus_keyphrase, canonical, noindex/nofollow, Open Graph / Twitter overrides, cornerstone) and
+`audit-seo` (site-wide work list: missing/too-long descriptions, long titles, missing keyphrases, noindex, duplicates).
+Field names match Yoast's own forthcoming `yoast-seo/get-post-seo-data` / `update-post-seo-data` abilities, which are
+bridged into our server the moment Yoast registers them.
+
+Yoast registers its abilities — and builds the indexables its scores need — **only when `WP_ENVIRONMENT_TYPE` is
+`production`**. For local/staging SEO work, drop a must-use plugin that returns true for the
+`Yoast\WP\SEO\should_index_indexables` filter on non-production environments (see
+`wp-content/mu-plugins/local-yoast-indexables.php` on The Newly dev site), then run **SEO → Tools → Optimize SEO
+data** once so scores exist. Yoast's `get-seo-scores` / `get-readability-scores` / `get-inclusive-language-scores`
+then appear as bridged tools.
 
 ---
 
@@ -279,9 +313,43 @@ re-serialize only the block you touch and leave every other block byte-identical
    - **Title, slug, status, excerpt** → `ai-by-roadmap/update-post`.
 4. Pin the write: pass `expected_block_type` (from step 2) and `expected_modified` (from step 1 or 2). A reordered
    block list or a concurrent edit returns a 409 instead of writing over it.
+5. Check the result: `ai-by-roadmap/render-block` returns the block's front-end HTML and plain text;
+   `ai-by-roadmap/get-preview-link` returns the permalink / authenticated preview URL to open or screenshot.
 
 Rich-text fields take inline HTML (`<p>`, `<strong>`, `<em>`) — never Markdown. Re-running the same patch is a no-op
 (`changed_fields: []`, no new revision).
+
+**Across pages.** `ai-by-roadmap/search-content` finds a phrase in every block field site-wide (synced patterns
+included) and returns post / block index / field path; `ai-by-roadmap/replace-text` rewrites it in bulk — it is a dry
+run by default, so call it once to review the before/after list and again with `dry_run: false` to apply. Several
+patches on one page go through `ai-by-roadmap/update-blocks` (validated together, saved once).
+
+**Undo.** Every write creates a revision. `ai-by-roadmap/list-revisions` shows them; `ai-by-roadmap/restore-revision`
+rolls back (and is itself reversible).
+
+**Links.** Store internal links as site-relative paths (`/therapy/`), never absolute URLs — `ai-by-roadmap/resolve-link`
+turns a route, title, slug or a URL from another environment into the right `relative_path`. `ai-by-roadmap/audit-links`
+scans URL fields, link fields and `<a href>` inside rich text and flags links written with a stale host or pointing at
+nothing; `fix_hosts: true` rewrites the stale-host ones. `assemble-page` and `insert-block` accept `dry_run: true` to
+validate a whole page or block (field names, choices, attachment IDs, template) without writing.
+
+**Synced patterns** (`wp_block` posts, the `fixed_rows` in `get-post-blocks`) are edited with the same tools: pass the
+pattern's `ref` id as `post_id`.
+
+---
+
+## Creating a new page, end to end
+
+1. **Pick the type** with `list-post-types`; **check for an existing one** with `find-posts`.
+2. **Build it**: on a locked type (program, location, team member…) prefer `ai-by-roadmap/duplicate-post` on the
+   closest existing entry, then `update-post` (title, slug, parent, featured image, terms) and `update-block-fields`
+   for the differences. On a free type, `assemble-page` (try `dry_run: true` first) or `insert-block` per section.
+3. **Link it**: `ai-by-roadmap/get-navigation` shows every menu and the megamenu; `add-menu-item` (footer / menus)
+   and `update-mega-nav` (header panels) put the page where people will find it. Internal URLs are relative paths.
+4. **Media**: `search-media` / `upload-media` for images, `update-media` for alt text.
+5. **SEO**: `get-post-seo` → `update-post-seo` (title, meta description, focus keyphrase); `audit-seo` for the whole
+   site before launch.
+6. **Review**: `render-block` / `get-preview-link`, then `update-post` `status: publish`.
 
 ---
 
@@ -308,8 +376,26 @@ Rich-text fields take inline HTML (`<p>`, `<strong>`, `<em>`) — never Markdown
 | `ai-by-roadmap/insert-block` | Add a filled block at an index | Structural edits (unlocked types) |
 | `ai-by-roadmap/remove-block` | Remove a block by index | Structural edits (unlocked types) |
 | `ai-by-roadmap/move-block` | Reorder a block | Structural edits |
+| `ai-by-roadmap/update-blocks` | Several block patches, one save | Multi-block edits |
 | `ai-by-roadmap/update-post` | Title / slug / status / excerpt | Post metadata fixes |
+| `ai-by-roadmap/render-block` | Front-end HTML + text of a block | Checking an edit |
+| `ai-by-roadmap/get-preview-link` | Permalink / preview / edit URLs | Handing off for review |
+| `ai-by-roadmap/search-content` | Find text across block fields | "Where does X appear?" |
+| `ai-by-roadmap/replace-text` | Bulk find/replace (dry run by default) | Renames, wording changes |
+| `ai-by-roadmap/list-revisions` | Undo history of a post | Before/after risky edits |
+| `ai-by-roadmap/restore-revision` | Roll a post back | Undo |
+| `ai-by-roadmap/resolve-link` | Route/title/URL → post + relative path | Writing internal links |
+| `ai-by-roadmap/audit-links` | Classify / fix links in block fields | After porting, before a domain move |
+| `ai-by-roadmap/duplicate-post` | Clone a post (blocks, meta, image, terms) to a draft | New entries on locked CPTs |
+| `ai-by-roadmap/get-navigation` | Menus by location + megamenu panels | Before linking a new page |
+| `ai-by-roadmap/add-menu-item` | Add/remove a WP menu item | Footer / menu links |
+| `ai-by-roadmap/update-mega-nav` | Edit a megamenu panel (ACF option) | Header navigation |
 | `ai-by-roadmap/upload-media` | Sideload an image into the media library | Media import |
+| `ai-by-roadmap/update-media` | Alt text / title / caption / description | Accessibility fixes |
+| `ai-by-roadmap/get-post-seo` | One post's Yoast SEO data, rendered output, scores, issues | SEO review |
+| `ai-by-roadmap/update-post-seo` | Write Yoast SEO fields (title, description, keyphrase, robots, social) | SEO fixes |
+| `ai-by-roadmap/audit-seo` | Site-wide SEO work list | Pre-launch SEO sweep |
+| `core/get-site-info`, `yoast-seo/*` | Bridged from core / Yoast when registered | Site facts, SEO scores & post SEO data |
 | `ai-by-roadmap/analyze-content` | Section count + structure | Pre-pipeline diagnostic |
 | `ai-by-roadmap/choose-blocks` | Pick block list (no fill) | Custom pipelines |
 | `ai-by-roadmap/score-blocks` | Audit a block list | Custom pipelines / QA |
@@ -329,6 +415,7 @@ Rich-text fields take inline HTML (`<p>`, `<strong>`, `<em>`) — never Markdown
 
 - Plugin entry point: [ai-by-roadmap.php](ai-by-roadmap.php)
 - Abilities (one file each): [src/Core/Abilities/](src/Core/Abilities/) and [src/Blocks/Abilities/](src/Blocks/Abilities/)
+- Partial-edit plumbing: [src/Blocks/BlockPatcher.php](src/Blocks/BlockPatcher.php) (ACF index space, guards, `patch_data()` merge, save + undo point), [src/Blocks/AcfBlockFields.php](src/Blocks/AcfBlockFields.php) (ACF introspection, unflatten, validate), [src/Blocks/Links.php](src/Blocks/Links.php), [src/Blocks/TextFields.php](src/Blocks/TextFields.php), [src/Core/Navigation.php](src/Core/Navigation.php)
 - Orchestrator pipeline: [src/Blocks/Orchestrator.php](src/Blocks/Orchestrator.php)
 - Agents (system prompts): [src/Core/Agents/](src/Core/Agents/) and [src/Blocks/Agents/](src/Blocks/Agents/)
 - Action Scheduler job: [src/Jobs/ComposePageJob.php](src/Jobs/ComposePageJob.php)

@@ -18,7 +18,7 @@ final class ChooseBlocks
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Choose blocks for content', 'ai-by-roadmap'),
             'description'         => __('Decide which ACF blocks to use for given source content. Returns an ordered array of {type, intent} pairs.', 'ai-by-roadmap'),

@@ -19,7 +19,7 @@ final class RemoveBlock
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, true, false),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Remove a block from a post', 'ai-by-roadmap'),
             'description'         => __('Remove one ACF block from an existing post by its block_index (from get-post-blocks), leaving all other blocks untouched. Pass expected_block_type so the wrong block is never removed if the list moved. Not allowed on post types with a locked template. Refuses to remove the last remaining block unless allow_empty is true. Returns the new block list.', 'ai-by-roadmap'),

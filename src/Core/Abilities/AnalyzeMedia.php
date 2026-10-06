@@ -18,7 +18,7 @@ final class AnalyzeMedia
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Analyze a media attachment', 'ai-by-roadmap'),
             'description'         => __('Run the vision model against an existing attachment and write SEO filename, description, and usage suggestion. Also regenerates the vector embedding when supported.', 'ai-by-roadmap'),

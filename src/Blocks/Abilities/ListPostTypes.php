@@ -21,7 +21,7 @@ final class ListPostTypes
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('List available post types', 'ai-by-roadmap'),
             'description'         => __('Return every public WordPress post type with its key, labels, rewrite slug, supports, and locked block template (if any). Call this before create-page/assemble-page to choose the right post type: match the source page route to a type\'s rewrite_slug (e.g. a /programs/… route → the type whose rewrite_slug is "programs"), not the generic "page". When a type has a template with template_lock set, supply your blocks in that exact order and of those exact types. `template` lists every row in order; rows with fixed:true (e.g. core/block synced patterns) are inserted automatically by assemble-page — supply only `fillable_blocks`, in that order.', 'ai-by-roadmap'),

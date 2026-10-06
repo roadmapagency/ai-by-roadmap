@@ -18,7 +18,7 @@ final class ScoreBlocks
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Score a block selection', 'ai-by-roadmap'),
             'description'         => __('Evaluate whether a chosen block list is well-justified by the source content. Returns pass/fail, a 1-10 score, and a one-line suggestion for correction.', 'ai-by-roadmap'),

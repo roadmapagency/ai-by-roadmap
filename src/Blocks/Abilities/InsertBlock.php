@@ -24,7 +24,7 @@ final class InsertBlock
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'                => ['show_in_rest' => true],
+            'meta'                => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, false),
             'category'            => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'               => __('Insert a block into a post', 'ai-by-roadmap'),
             'description'         => __('Insert one new ACF block into an existing post at a position, leaving all other blocks untouched. Fill the fields yourself using the block\'s schema from list-blocks (same rules as assemble-page: inline HTML for rich text, attachment IDs for images, include an ai_content string with the verbatim source when you have one). at_index is in the ACF index space of get-post-blocks: the new block lands BEFORE the block currently at that index; at_index equal to acf_blocks appends. Not allowed on post types with a locked template (use update-block-fields there). Returns the new block list so you do not need to re-read.', 'ai-by-roadmap'),
@@ -47,6 +47,7 @@ final class InsertBlock
                     ],
                     'align'             => ['type' => 'string', 'description' => 'Optional block alignment attribute (e.g. "full").'],
                     'expected_modified' => ['type' => 'string', 'description' => 'Optional guard: the post\'s modified value from get-post-blocks/find-posts. Refuse if the post changed since.'],
+                    'dry_run'           => ['type' => 'boolean', 'default' => false, 'description' => 'Validate and serialize the new block without writing; returns valid: true plus the resulting block list preview, or the same error a real call would.'],
                 ],
             ],
             'output_schema'       => self::structural_output_schema(),
@@ -89,6 +90,8 @@ final class InsertBlock
                 'modified'    => ['type' => 'string', 'description' => 'The post\'s new modified value; use as expected_modified for a follow-up write.'],
                 'edit_link'   => ['type' => 'string'],
                 'permalink'   => ['type' => 'string'],
+                'dry_run'     => ['type' => 'boolean', 'description' => 'Present and true when nothing was written.'],
+                'valid'       => ['type' => 'boolean'],
             ],
         ];
     }
@@ -178,21 +181,30 @@ final class InsertBlock
             return $check;
         }
 
-        $modified = BlockPatcher::save($post_id, $blocks);
-        if (is_wp_error($modified)) {
-            return $modified;
-        }
-
-        return [
+        $result = [
             'success'     => true,
             'post_id'     => $post_id,
             'block_index' => $at_index,
             'block_type'  => $type,
             'acf_blocks'  => count($types),
             'blocks'      => BlockPatcher::summary($blocks),
-            'modified'    => $modified,
+            'modified'    => BlockPatcher::modified($post),
             'edit_link'   => (string) get_edit_post_link($post_id, 'raw'),
             'permalink'   => (string) get_permalink($post_id),
         ];
+
+        if (! empty($input['dry_run'])) {
+            $result['dry_run'] = true;
+            $result['valid']   = true;
+            return $result;
+        }
+
+        $modified = BlockPatcher::save($post_id, $blocks);
+        if (is_wp_error($modified)) {
+            return $modified;
+        }
+        $result['modified'] = $modified;
+
+        return $result;
     }
 }

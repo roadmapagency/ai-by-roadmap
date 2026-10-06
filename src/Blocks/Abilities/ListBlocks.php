@@ -19,7 +19,7 @@ final class ListBlocks
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(true),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('List available ACF blocks', 'ai-by-roadmap'),
             'description'         => __('Return every ACF block registered for AI composition. Each entry has the block ID, a description of what it is for, and the full JSON schema describing its fields.', 'ai-by-roadmap'),

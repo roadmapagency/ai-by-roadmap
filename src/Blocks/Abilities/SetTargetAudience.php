@@ -11,7 +11,7 @@ final class SetTargetAudience
     public static function register(): void
     {
         wp_register_ability(self::ID, [
-            'meta'           => ['show_in_rest' => true],
+            'meta'           => \Roadmap\AiByRoadmap\Plugin::ability_meta(false, false, true, false),
             'category'           => \Roadmap\AiByRoadmap\Categories::SLUG,
             'label'              => __('Set target audience for a post', 'ai-by-roadmap'),
             'description'         => __('Persist a target-audience description against a post so subsequent generations and block swaps use the same audience context.', 'ai-by-roadmap'),
