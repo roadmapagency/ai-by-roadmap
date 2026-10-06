@@ -16,8 +16,8 @@ This README is also the operational manual for any **Claude skill** that drives 
 
 - **WordPress 6.9+** (for the Abilities API and bundled `php-ai-client`)
 - **PHP 8.1+**
-- **Advanced Custom Fields Pro** with at least one block registered to the active theme
-- **MCP Adapter plugin** (only if you want the MCP transport — REST works without it)
+- **Advanced Custom Fields Pro** with at least one block registered to the active theme (declared via `Requires Plugins`; WordPress blocks activation until it is installed and active)
+- **MCP Adapter plugin** (`mcp-adapter`, also declared via `Requires Plugins`) — provides the MCP transport and the Abilities API bridge; the REST routes would work without it, but the plugin is built to be driven over MCP
 - **MariaDB 11.7+** is optional. If present, image search is vector-ranked. On older versions, the plugin transparently degrades to keyword-only search; no other functionality is affected.
 
 API credentials for the underlying LLM provider are managed by the shared WordPress AI settings shipped with `php-ai-client` — this plugin does not own its own credentials UI.
