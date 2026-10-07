@@ -1,0 +1,11 @@
+# Excluded from the release zip (rsync --exclude-from; leading / = repo root).
+# composer.json/lock are copied for `composer install`, then removed by bin/build-zip.sh.
+/.git
+/.github
+/bin
+/build
+/vendor
+/.distignore
+/.gitignore
+*.zip
+.DS_Store
