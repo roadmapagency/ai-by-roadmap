@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 — 2026-10-07
 
 ### Tooling
 - Pushing a `v*` tag now publishes a GitHub Release with an installable `ai-by-roadmap-<version>.zip`
