@@ -227,7 +227,7 @@ final class AcfBlockFields
 
     /**
      * Stored value keys the live definitions do not explain — a sign of field
-     * name drift from an older block schema (see `wp the-newly fields audit`).
+     * name drift from an older block schema.
      *
      * @param array<string, mixed>             $data
      * @param array<int, array<string, mixed>> $defs

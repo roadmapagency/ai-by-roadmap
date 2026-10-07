@@ -117,7 +117,7 @@ final class GetPostBlocks
                                 'stray_fields' => [
                                     'type'        => 'array',
                                     'items'       => ['type' => 'string'],
-                                    'description' => 'Present when the stored data has keys the live field schema does not know (field-name drift from an older block version). These are ignored by the theme; migrate with `wp the-newly fields migrate`.',
+                                    'description' => 'Present when the stored data has keys the live field schema does not know (field-name drift from an older block version). These are ignored by the theme; migrate them with the field-migration tooling of the theme, if it has one.',
                                 ],
                             ],
                         ],

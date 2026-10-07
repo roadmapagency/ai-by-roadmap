@@ -2,10 +2,11 @@
 /**
  * Plugin Name:       AI by Roadmap
  * Description:       Surfaces ACF blocks, image search, and content-generation pipelines to LLMs through the WordPress Abilities API.
- * Version:           0.3.3
+ * Version:           0.3.4
  * Requires PHP:      8.1
  * Requires at least: 6.9
  * Requires Plugins:  mcp-adapter, advanced-custom-fields-pro
+ * Update URI:        https://github.com/roadmapagency/ai-by-roadmap
  * Author:            Roadmap Agency Inc.
  * License:           GPL-2.0-or-later
  * Text Domain:       ai-by-roadmap
@@ -34,7 +35,7 @@ if (defined(__NAMESPACE__ . '\\PLUGIN_DIR')) {
     return;
 }
 
-const VERSION    = '0.3.3';
+const VERSION    = '0.3.4';
 const PLUGIN_DIR = __DIR__;
 const PLUGIN_URL_BASE = __FILE__;
 
