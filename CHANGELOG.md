@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 — 2026-10-07
+
+### Fixed
+- Installing GitHub's auto-generated "Source code" zip next to an existing install loaded a second copy of the
+  plugin and caused a fatal error (`Cannot declare class …Jetpack\Autoloader…`). A second copy now stands down
+  and shows an admin notice instead.
+- The release asset is now named `ai-by-roadmap.zip` (no version), so it can't be confused with the "Source code"
+  download. The release notes say which file to install.
+
 ## 0.3.2 — 2026-10-07
 
 ### Tooling
