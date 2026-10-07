@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Core\Agents;
 
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
+
 /**
  * Reads raw website content and reports its structure (section count + a short
  * description per section). Used by the Orchestrator as a hard constraint on
@@ -11,6 +13,11 @@ namespace Roadmap\AiByRoadmap\Core\Agents;
  */
 final class ContentAnalyzerAgent extends AbstractAgent
 {
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_CLASSIFY;
+    }
+
     protected function output_schema(): array
     {
         return [

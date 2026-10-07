@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Core\Agents;
 
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 use WordPress\AiClient\Messages\DTO\MessagePart;
 use WordPress\AiClient\Messages\DTO\UserMessage;
 use WP_Ability;
 use WP_AI_Client_Ability_Function_Resolver;
-use WP_Error;
 
 /**
  * Base class for every agent. Child classes describe:
@@ -20,6 +20,10 @@ use WP_Error;
  * /wp-includes/ai-client/) and drives the tool-use loop — call model, run any
  * returned FunctionCalls, append FunctionResponses, repeat until the model
  * returns a plain message.
+ *
+ * Model choice goes through ModelRouter: when the OpenRouter connector is
+ * configured, requests use the OpenRouter Auto Router with the cost tier of
+ * task_type(); otherwise core picks the model.
  *
  * Theme/plugin code can filter the system prompt and tool list via:
  *   - ai_by_roadmap_filter_instructions / ai_by_roadmap_filter_instructions_{Class}
@@ -38,6 +42,12 @@ abstract class AbstractAgent
     protected function tool_ability_ids(): array
     {
         return [];
+    }
+
+    /** ModelRouter::TASK_* used to route this agent's requests. */
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_FILL_BLOCK;
     }
 
     public function instructions(): string
@@ -78,17 +88,15 @@ abstract class AbstractAgent
         $history = [new UserMessage([new MessagePart($user_message)])];
 
         for ($turn = 0; $turn < self::MAX_TOOL_TURNS; $turn++) {
-            $builder = wp_ai_client_prompt($history);
-            $builder->using_system_instruction($this->instructions());
-            $builder->as_json_response($this->output_schema());
-            if (! empty($abilities)) {
-                $builder->using_abilities(...$abilities);
-            }
-
-            $result = $builder->generate_text_result();
-            if ($result instanceof WP_Error) {
-                throw new \RuntimeException('AI call failed: ' . $result->get_error_message());
-            }
+            $result = ModelRouter::generate_text(function (bool $routed) use ($history, $abilities) {
+                $builder = wp_ai_client_prompt($routed ? ModelRouter::split_function_responses($history) : $history);
+                $builder->using_system_instruction($this->instructions());
+                $builder->as_json_response($this->output_schema());
+                if (! empty($abilities)) {
+                    $builder->using_abilities(...$abilities);
+                }
+                return $builder;
+            }, $this->task_type());
 
             $message = $result->toMessage();
 

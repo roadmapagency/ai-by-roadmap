@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Roadmap\AiByRoadmap\Blocks\Agents;
 
 use Roadmap\AiByRoadmap\Core\Agents\AbstractAgent;
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 
 /**
  * Audits a chosen block selection against the source content. When `pass`
@@ -13,6 +14,11 @@ use Roadmap\AiByRoadmap\Core\Agents\AbstractAgent;
  */
 final class BlockScorerAgent extends AbstractAgent
 {
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_JUDGE;
+    }
+
     protected function output_schema(): array
     {
         return [

@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Core\Agents;
 
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 use WordPress\AiClient\Files\DTO\File;
-use WordPress\AiClient\Files\Enums\FileTypeEnum;
-use WP_Error;
 
 /**
  * Analyses an uploaded image and returns SEO filename + description +
@@ -17,6 +16,11 @@ use WP_Error;
  */
 final class MediaAnalyzerAgent extends AbstractAgent
 {
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_VISION;
+    }
+
     protected function output_schema(): array
     {
         return [
@@ -67,17 +71,19 @@ PROMPT;
     {
         $mime_type = mime_content_type($file_path) ?: 'image/jpeg';
         $data      = base64_encode((string) file_get_contents($file_path));
-        $file      = File::fromBase64Data($data, $mime_type, FileTypeEnum::inline());
+        $file      = new File('data:' . $mime_type . ';base64,' . $data, $mime_type);
 
-        $builder = wp_ai_client_prompt();
-        $builder->using_system_instruction($this->instructions());
-        $builder->as_json_response($this->output_schema());
-        $builder->with_text('Analyze this image and return the structured metadata.');
-        $builder->with_file($file, $mime_type);
-
-        $result = $builder->generate_text_result();
-        if ($result instanceof WP_Error) {
-            throw new \RuntimeException('Image analysis failed: ' . $result->get_error_message());
+        try {
+            $result = ModelRouter::generate_text(function () use ($file, $mime_type) {
+                $builder = wp_ai_client_prompt();
+                $builder->using_system_instruction($this->instructions());
+                $builder->as_json_response($this->output_schema());
+                $builder->with_text('Analyze this image and return the structured metadata.');
+                $builder->with_file($file, $mime_type);
+                return $builder;
+            }, $this->task_type());
+        } catch (\RuntimeException $e) {
+            throw new \RuntimeException('Image analysis failed: ' . $e->getMessage(), 0, $e);
         }
 
         $text    = trim($result->toText());

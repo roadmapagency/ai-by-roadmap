@@ -8,6 +8,7 @@ use Roadmap\AiByRoadmap\Blocks\BlockRegistry;
 use Roadmap\AiByRoadmap\Blocks\SchemaGenerator;
 use Roadmap\AiByRoadmap\Core\Agents\AbstractAgent;
 use Roadmap\AiByRoadmap\Core\EvaluationLogger;
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 
 /**
  * Picks an ordered list of {type, intent} block selections for a page.
@@ -16,6 +17,11 @@ use Roadmap\AiByRoadmap\Core\EvaluationLogger;
  */
 final class BlockChooserAgent extends AbstractAgent
 {
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_CLASSIFY;
+    }
+
     /**
      * @param array<string, mixed> $signals       Output of ContentAnalyzerAgent.
      * @param string               $retry_reason  Suggestion from BlockScorerAgent on the retry pass.

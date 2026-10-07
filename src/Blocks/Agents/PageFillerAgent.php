@@ -7,6 +7,7 @@ namespace Roadmap\AiByRoadmap\Blocks\Agents;
 use Roadmap\AiByRoadmap\Blocks\SchemaGenerator;
 use Roadmap\AiByRoadmap\Core\Abilities\SearchMedia;
 use Roadmap\AiByRoadmap\Core\Agents\AbstractAgent;
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 
 /**
  * Fills an entire page of blocks in a single call. Receives a combined
@@ -15,6 +16,11 @@ use Roadmap\AiByRoadmap\Core\Agents\AbstractAgent;
  */
 final class PageFillerAgent extends AbstractAgent
 {
+    protected function task_type(): string
+    {
+        return ModelRouter::TASK_FILL_PAGE;
+    }
+
     /**
      * @param array<int, array{type:string,intent:string}> $chosen_blocks
      */

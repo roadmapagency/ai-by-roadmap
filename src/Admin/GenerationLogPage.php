@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Roadmap\AiByRoadmap\Admin;
 
+use Roadmap\AiByRoadmap\Core\AI\ModelRouter;
 use Roadmap\AiByRoadmap\Core\EvaluationLogger;
 use Roadmap\AiByRoadmap\Core\VectorSupport;
 
@@ -56,6 +57,7 @@ final class GenerationLogPage
         echo '<h1>' . esc_html__('AI Generation Log', 'ai-by-roadmap') . '</h1>';
 
         $this->render_capability_notice();
+        $this->render_routing();
         $this->render_reindex_form();
 
         if (empty($rows)) {
@@ -92,6 +94,41 @@ final class GenerationLogPage
         echo '<div class="notice notice-warning"><p>';
         esc_html_e('Vector image search is disabled — your database does not support MariaDB VECTOR columns (requires 11.7+). Image search will use keyword matching only.', 'ai-by-roadmap');
         echo '</p></div>';
+    }
+
+    private function render_routing(): void
+    {
+        echo '<h2>' . esc_html__('Model routing', 'ai-by-roadmap') . '</h2><p>';
+        if (ModelRouter::is_openrouter_available()) {
+            esc_html_e('Requests go through the OpenRouter Auto Router (openrouter/auto), with a cost tier per task. If a routed call fails, it is retried once on the default provider.', 'ai-by-roadmap');
+        } else {
+            esc_html_e('OpenRouter is not connected, so WordPress picks the model from the first configured AI provider.', 'ai-by-roadmap');
+        }
+        echo '</p>';
+
+        $entries = array_slice(ModelRouter::recent(), 0, 15);
+        if (empty($entries)) {
+            return;
+        }
+
+        echo '<table class="widefat striped" style="max-width:960px;margin-bottom:2em">';
+        echo '<thead><tr>';
+        foreach ([__('Time', 'ai-by-roadmap'), __('Task', 'ai-by-roadmap'), __('Tier', 'ai-by-roadmap'), __('Provider', 'ai-by-roadmap'), __('Model', 'ai-by-roadmap'), __('Tokens', 'ai-by-roadmap'), __('Error', 'ai-by-roadmap')] as $label) {
+            echo '<th>' . esc_html($label) . '</th>';
+        }
+        echo '</tr></thead><tbody>';
+        foreach ($entries as $entry) {
+            echo '<tr>';
+            echo '<td>' . esc_html(wp_date('Y-m-d H:i:s', (int) $entry['time'])) . '</td>';
+            echo '<td>' . esc_html((string) $entry['task']) . '</td>';
+            echo '<td>' . esc_html((string) ($entry['tier'] ?? '—')) . '</td>';
+            echo '<td>' . esc_html((string) $entry['provider']) . '</td>';
+            echo '<td><code>' . esc_html((string) $entry['model']) . '</code></td>';
+            echo '<td>' . esc_html((string) ($entry['tokens'] ?? '—')) . '</td>';
+            echo '<td>' . esc_html((string) ($entry['error'] ?? '')) . '</td>';
+            echo '</tr>';
+        }
+        echo '</tbody></table>';
     }
 
     private function render_reindex_form(): void
