@@ -6,12 +6,16 @@
 #
 # Usage: bin/build-zip.sh [tag]   e.g. bin/build-zip.sh v0.3.1
 #        With no tag, the plugin header version is used and no tag check runs.
+#        PLUGIN_DIR=<path> packages a different checkout (e.g. an older tag that
+#        predates this script) using this checkout's .distignore. Output still
+#        goes to <this repo>/build.
 
 set -euo pipefail
 
 SLUG="ai-by-roadmap"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="$ROOT/build"
+TOOLING="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "${PLUGIN_DIR:-$TOOLING}" && pwd)"
+BUILD="$TOOLING/build"
 cd "$ROOT"
 
 header_version="$(sed -n 's/^ \* Version:[[:space:]]*//p' "$SLUG.php" | tr -d '[:space:]')"
@@ -34,7 +38,7 @@ fi
 rm -rf "$BUILD"
 mkdir -p "$BUILD/$SLUG"
 
-rsync -a --exclude-from="$ROOT/.distignore" "$ROOT/" "$BUILD/$SLUG/"
+rsync -a --exclude-from="$TOOLING/.distignore" --exclude=/.tooling "$ROOT/" "$BUILD/$SLUG/"
 
 # Rebuild vendor/ from the lockfile, without dev dependencies.
 composer install --working-dir="$BUILD/$SLUG" --no-dev --optimize-autoloader --no-interaction --no-progress --quiet

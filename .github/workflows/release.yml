@@ -23,9 +23,17 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      # Plugin source at the tag…
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.TAG }}
+
+      # …packaged with the current build tooling, so tags that predate
+      # bin/build-zip.sh can still be backfilled.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .tooling
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -35,12 +43,12 @@ jobs:
 
       - name: Build zip
         id: build
-        run: bin/build-zip.sh "$TAG" | tee -a "$GITHUB_OUTPUT"
+        run: PLUGIN_DIR="$GITHUB_WORKSPACE" .tooling/bin/build-zip.sh "$TAG" | tee -a "$GITHUB_OUTPUT"
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
           name: ai-by-roadmap ${{ steps.build.outputs.version }}
-          body_path: build/notes.md
-          files: ${{ steps.build.outputs.zip }}
+          body_path: .tooling/build/notes.md
+          files: .tooling/${{ steps.build.outputs.zip }}
           fail_on_unmatched_files: true
