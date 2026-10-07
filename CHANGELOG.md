@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Tooling
+- Pushing a `v*` tag now publishes a GitHub Release with an installable `ai-by-roadmap-<version>.zip`
+  (`.github/workflows/release.yml` → `bin/build-zip.sh`). The release notes come from this file. The build fails if
+  the tag doesn't match the plugin version.
+
 ## 0.3.1 — 2026-10-07
 
 ### Fixed

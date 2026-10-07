@@ -1,0 +1,46 @@
+name: Release
+
+# Builds ai-by-roadmap-<version>.zip and publishes it as a GitHub Release whenever
+# a v* tag is pushed. Run manually (Actions → Release → Run workflow) to backfill
+# an existing tag; re-running replaces the zip on that release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.3.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+          coverage: none
+
+      - name: Build zip
+        id: build
+        run: bin/build-zip.sh "$TAG" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ai-by-roadmap ${{ steps.build.outputs.version }}
+          body_path: build/notes.md
+          files: ${{ steps.build.outputs.zip }}
+          fail_on_unmatched_files: true
