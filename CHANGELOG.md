@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — unreleased
 
 ### Added
 - **The plugin↔theme contract now lives in the plugin** (`src/Theme/`, `src/Icons/`). A theme opts in with
