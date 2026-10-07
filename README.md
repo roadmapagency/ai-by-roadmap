@@ -70,6 +70,38 @@ then appear as bridged tools.
 
 ---
 
+## Model routing (OpenRouter Auto Router)
+
+The plugin never names a model itself. Without OpenRouter, WordPress core picks the first model of the first
+configured AI provider that can do the request. That provider is Anthropic → Google → OpenAI, in plugin load order.
+
+When the **OpenRouter** connector is configured, every agent request goes to
+[`openrouter/auto`](https://openrouter.ai/openrouter/auto) instead (`Core/AI/ModelRouter.php`). The OpenRouter
+provider plugin does no routing of its own, and it doesn't declare JSON-schema/tool support, so core would never pick
+it. The router passes the Auto Router a cost tier for each type of task, plus an allowlist of model families that
+handle strict JSON output and tool calls reliably:
+
+| Task | Agents | Cost tier |
+|---|---|---|
+| `classify` | ContentAnalyzer, BlockChooser | low |
+| `judge` | BlockScorer | medium |
+| `fill_block` | BlockFiller | medium |
+| `fill_page` | PageFiller | high |
+| `vision` | MediaAnalyzer | medium (vision-capable families only) |
+
+- **Allowed models** (default): `anthropic/*`, `openai/gpt-5*`, `google/gemini-*`. The router also sends
+  `provider.require_parameters = true`, so OpenRouter only uses endpoints that honour `response_format` and `tools`.
+- **Fallback**: if a routed call fails, it is retried once on the default provider.
+- **Embeddings** always use the default provider. The OpenRouter plugin has no embedding model.
+- **Visibility**: **Settings → AI by Roadmap** lists the last routing decisions: task, tier, the model OpenRouter
+  actually chose, tokens, and any errors.
+- **Filters**:
+  - `ai_by_roadmap_use_openrouter`: return false to switch routing off.
+  - `ai_by_roadmap_router_allowed_models`: the default allowlist patterns.
+  - `ai_by_roadmap_router_profiles`: the per-task `cost_tier` / `allowed_models`.
+
+---
+
 ## What the plugin is for
 
 The plugin sits between **raw content** (typically scraped or copy-pasted from a legacy site) and **published WordPress pages** built from the Roadmap Starter theme's ACF blocks (Hero, FAQs, Image and Text, etc.).
