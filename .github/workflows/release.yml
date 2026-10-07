@@ -1,6 +1,6 @@
 name: Release
 
-# Builds ai-by-roadmap-<version>.zip and publishes it as a GitHub Release whenever
+# Builds ai-by-roadmap.zip and publishes it as a GitHub Release whenever
 # a v* tag is pushed. Run manually (Actions → Release → Run workflow) to backfill
 # an existing tag; re-running replaces the zip on that release.
 

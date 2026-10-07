@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build an installable plugin zip: build/ai-by-roadmap-<version>.zip containing a
+# Build an installable plugin zip: build/ai-by-roadmap.zip containing a
 # top-level ai-by-roadmap/ folder, plus build/notes.md (this version's CHANGELOG
 # section). Used by .github/workflows/release.yml; safe to run locally.
 #
@@ -44,7 +44,9 @@ rsync -a --exclude-from="$TOOLING/.distignore" --exclude=/.tooling "$ROOT/" "$BU
 composer install --working-dir="$BUILD/$SLUG" --no-dev --optimize-autoloader --no-interaction --no-progress --quiet
 rm -f "$BUILD/$SLUG/composer.json" "$BUILD/$SLUG/composer.lock"
 
-(cd "$BUILD" && zip -rq "$SLUG-$version.zip" "$SLUG")
+# Unversioned name: keeps it distinct from GitHub's auto-generated
+# "Source code" ai-by-roadmap-<version>.zip, whose folder is ai-by-roadmap-<version>/.
+(cd "$BUILD" && zip -rq "$SLUG.zip" "$SLUG")
 
 # Release notes: the "## <version>" section of CHANGELOG.md, up to the next "## ".
 awk -v v="$version" '
@@ -54,6 +56,7 @@ awk -v v="$version" '
 if ! grep -q '[^[:space:]]' "$BUILD/notes.md"; then
     echo "See [CHANGELOG.md](CHANGELOG.md)." > "$BUILD/notes.md"
 fi
+printf '\n---\n\n**Install:** download **`%s.zip`** below and upload it in Plugins → Add New → Upload (choose *Replace current with uploaded* when updating). Do not use the "Source code" downloads — they install as a second copy.\n' "$SLUG" >> "$BUILD/notes.md"
 
 echo "version=$version"
-echo "zip=build/$SLUG-$version.zip"
+echo "zip=build/$SLUG.zip"

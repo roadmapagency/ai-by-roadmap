@@ -108,7 +108,7 @@ handle strict JSON output and tool calls reliably:
 2. Add a `## x.y.z — YYYY-MM-DD` section to `CHANGELOG.md`.
 3. Merge to `main`, then `git tag -a vX.Y.Z -m "…" && git push origin main vX.Y.Z`.
 
-The **Release** GitHub Action then builds `ai-by-roadmap-X.Y.Z.zip` and attaches it to a GitHub Release whose notes
+The **Release** GitHub Action then builds `ai-by-roadmap.zip` and attaches it to a GitHub Release whose notes
 are that changelog section. The zip has a top-level `ai-by-roadmap/` folder and a `vendor/` rebuilt from
 `composer.lock` with no dev dependencies. Upload it with **Plugins → Add New → Upload** to install or update.
 - The build fails if the tag doesn't match the plugin version.
