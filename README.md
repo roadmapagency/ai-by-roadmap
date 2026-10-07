@@ -63,8 +63,9 @@ bridged into our server the moment Yoast registers them.
 
 Yoast registers its abilities — and builds the indexables its scores need — **only when `WP_ENVIRONMENT_TYPE` is
 `production`**. For local/staging SEO work, drop a must-use plugin that returns true for the
-`Yoast\WP\SEO\should_index_indexables` filter on non-production environments (see
-`wp-content/mu-plugins/local-yoast-indexables.php` on The Newly dev site), then run **SEO → Tools → Optimize SEO
+`Yoast\WP\SEO\should_index_indexables` filter on non-production environments, e.g.
+`add_filter('Yoast\WP\SEO\should_index_indexables', '__return_true');` guarded by
+`wp_get_environment_type()`, then run **SEO → Tools → Optimize SEO
 data** once so scores exist. Yoast's `get-seo-scores` / `get-readability-scores` / `get-inclusive-language-scores`
 then appear as bridged tools.
 
@@ -114,6 +115,28 @@ are that changelog section. The zip has a top-level `ai-by-roadmap/` folder and 
 - The build fails if the tag doesn't match the plugin version.
 - To build the same zip locally, run `bin/build-zip.sh [vX.Y.Z]`. The output goes to `build/`.
 - To (re)publish an existing tag, use **Actions → Release → Run workflow**.
+
+---
+
+## Automatic updates (from GitHub Releases)
+
+The plugin doesn't come from WordPress.org. The `Update URI` header stops WordPress from ever checking there.
+Instead, sites check this repo's GitHub Releases ([Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker),
+`src/Updater.php`). A newer release tag shows up in wp-admin as a normal plugin update (manual, bulk or auto-update),
+and installs the release's `ai-by-roadmap.zip` asset.
+
+No credentials are needed, because the repo is public. A token is optional. It lifts GitHub's limit of 60
+unauthenticated API requests per hour per server IP, which only matters when many sites share one server (each site
+checks about twice a day):
+
+```php
+define('AI_BY_ROADMAP_GITHUB_TOKEN', 'github_pat_…'); // fine-grained, this repo only, Contents: read-only
+```
+
+- **Git checkouts** (a `.git` folder in the plugin directory, e.g. dev sites): the updater is off, because an update
+  would replace the folder and wipe the working copy. Override with the `ai_by_roadmap_enable_updater` filter.
+- **Folder name:** the plugin must live in `wp-content/plugins/ai-by-roadmap/`. A copy installed from GitHub's
+  "Source code" zip (`ai-by-roadmap-x.y.z/`) should be deleted and reinstalled from `ai-by-roadmap.zip`.
 
 ---
 

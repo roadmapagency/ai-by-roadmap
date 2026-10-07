@@ -98,6 +98,8 @@ final class Plugin
 
     public function boot(): void
     {
+        Updater::register();
+
         EvaluationLogger::create_table();
         JobStore::create_table();
         if (VectorSupport::is_available()) {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.4 — 2026-10-07
+
+### Added
+- Automatic updates from this repo's GitHub Releases (`src/Updater.php`, Plugin Update Checker 5). A newer
+  release tag shows up in wp-admin as a normal plugin update and installs the release's `ai-by-roadmap.zip`.
+  The `Update URI` header stops WordPress from checking WordPress.org. No token is needed: the repo is public,
+  and `AI_BY_ROADMAP_GITHUB_TOKEN` is optional, to lift GitHub's API rate limit. The updater is off when the
+  plugin directory is a git checkout.
+
+### Changed
+- Removed client-specific references from the README and code comments.
+
 ## 0.3.3 — 2026-10-07
 
 ### Fixed
