@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — unreleased
+
+### Added
+- **The plugin↔theme contract now lives in the plugin** (`src/Theme/`, `src/Icons/`). A theme opts in with
+  `add_theme_support('ai-by-roadmap', ['contract' => 1, 'min_plugin' => …, 'icons' => […], 'skip_blocks' => […]])`.
+  The plugin then provides what forks used to copy in `AIForGutenbergProvider.php`:
+  - ACF→JSON-schema conversion for every block (`SchemaConverter`, a verbatim port)
+  - the Source Content (`ai_content`) field, with the same key and position as before
+  - icon search as `ai-by-roadmap/search-icons`, through an `IconProvider` (Lucide, local; or Font Awesome),
+    added to the page- and block-filler agents
+- A contract/version handshake shows an admin notice on a mismatch.
+- Themes that still ship their own provider (`roadmap_starter_register_blocks_with_ai`) are detected, and the plugin
+  stays out of their way.
+
 ## 0.3.4 — 2026-10-07
 
 ### Added

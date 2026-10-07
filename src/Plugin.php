@@ -99,6 +99,7 @@ final class Plugin
     public function boot(): void
     {
         Updater::register();
+        Theme\ThemeSupport::register();
 
         EvaluationLogger::create_table();
         JobStore::create_table();

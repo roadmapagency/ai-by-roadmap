@@ -45,12 +45,24 @@ final class TextFields
                 $out = array_merge($out, self::collect((array) $value, (array) ($def['sub_fields'] ?? []), $path . '.', $include_ai_content));
                 continue;
             }
-            if (in_array($def['type'], self::SKIP_TYPES, true) || ! is_string($value) || $value === '') {
+            if (in_array($def['type'], self::skip_types(), true) || ! is_string($value) || $value === '') {
                 continue;
             }
             $out[] = ['path' => $path, 'value' => $value];
         }
         return $out;
+    }
+
+    /**
+     * Field types that never hold searchable prose: the fixed list, the
+     * active icon set's field types, and the ai_by_roadmap_skip_field_types filter.
+     *
+     * @return string[]
+     */
+    private static function skip_types(): array
+    {
+        static $types = null;
+        return $types ??= (array) apply_filters('ai_by_roadmap_skip_field_types', array_values(array_unique(array_merge(self::SKIP_TYPES, \Roadmap\AiByRoadmap\Icons\Icons::field_types()))));
     }
 
     /**
