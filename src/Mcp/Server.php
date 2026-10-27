@@ -10,6 +10,8 @@ use WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler;
 use WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler;
 use WP\MCP\Transport\HttpTransport;
 
+use const Roadmap\AiByRoadmap\VERSION;
+
 /**
  * Registers the plugin's MCP server — the single connector an external agent
  * (Claude Desktop / Claude Code / any MCP client) points at. It exposes:
@@ -53,7 +55,7 @@ final class Server
             'mcp',
             __('AI by Roadmap', 'ai-by-roadmap'),
             __('Build, edit and maintain pages of ACF blocks; media search and upload; SEO scores via Yoast when available.', 'ai-by-roadmap'),
-            '0.2.0',
+            VERSION,
             [HttpTransport::class],
             ErrorLogMcpErrorHandler::class,
             NullMcpObservabilityHandler::class,
