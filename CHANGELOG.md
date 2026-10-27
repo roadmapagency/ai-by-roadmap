@@ -13,6 +13,21 @@
 - A contract/version handshake shows an admin notice on a mismatch.
 - Themes that still ship their own provider (`roadmap_starter_register_blocks_with_ai`) are detected, and the plugin
   stays out of their way.
+- **Roadmap Hub** (`src/Hub/`, Settings › Roadmap Hub). Connects the site to the Roadmap WordPress Hub worker, so staff
+  reach every client site from Claude through one connector, signed in with Microsoft, without application passwords.
+  - *Connect* sends you to the hub to sign in and pick the client. The hub then calls `POST ai-by-roadmap/v1/hub/connect`
+    with the single-use code this site issued, and the site pins the hub's Ed25519 public key.
+  - Hub requests carry a 60-second EdDSA token naming the staff member. `HubAuth` verifies it (key, issuer, audience =
+    this `home_url`, lifetime, jti replay) and runs the request as the WordPress user with that email or one of its
+    staff-domain aliases. It only applies to the MCP endpoint and `GET ai-by-roadmap/v1/hub/whoami`.
+  - Each site reports an environment (`production`/`staging`/`development`), taken from `WP_ENVIRONMENT_TYPE` unless
+    overridden on the Hub page, so Claude can tell staging from production.
+  - A database copied to another environment keeps the old connection but is refused (wrong audience) until it is
+    reconnected, and the Hub page says so.
+  - The hub URL comes from `AI_BY_ROADMAP_HUB_URL`, the Hub page, or `Hub::DEFAULT_URL`.
+
+### Fixed
+- The MCP server reported version 0.2.0 regardless of the plugin version; it now reports `VERSION`.
 
 ## 0.3.4 — 2026-10-07
 

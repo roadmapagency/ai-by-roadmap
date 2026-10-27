@@ -7,12 +7,14 @@ namespace Roadmap\AiByRoadmap;
 use Roadmap\AiByRoadmap\Admin\BlockSwapper;
 use Roadmap\AiByRoadmap\Admin\ContentGenerator;
 use Roadmap\AiByRoadmap\Admin\GenerationLogPage;
+use Roadmap\AiByRoadmap\Admin\HubPage;
 use Roadmap\AiByRoadmap\Blocks\Abilities as BlockAbilities;
 use Roadmap\AiByRoadmap\Core\Abilities as CoreAbilities;
 use Roadmap\AiByRoadmap\Core\EvaluationLogger;
 use Roadmap\AiByRoadmap\Core\MediaAnalyzer;
 use Roadmap\AiByRoadmap\Core\VectorStore;
 use Roadmap\AiByRoadmap\Core\VectorSupport;
+use Roadmap\AiByRoadmap\Hub\Hub;
 use Roadmap\AiByRoadmap\Jobs\ComposePageJob;
 use Roadmap\AiByRoadmap\Jobs\JobStore;
 use Roadmap\AiByRoadmap\Mcp\Server as McpServer;
@@ -165,10 +167,15 @@ final class Plugin
 
         add_action('mcp_adapter_init', [McpServer::class, 'register']);
 
+        // Roadmap Hub: staff reach this site from Claude through one shared
+        // connector, as their own WordPress user (see Hub\HubAuth).
+        Hub::register();
+
         if (is_admin()) {
             (new GenerationLogPage())->register();
             (new ContentGenerator())->register();
             (new BlockSwapper())->register();
+            (new HubPage())->register();
         }
 
     }
