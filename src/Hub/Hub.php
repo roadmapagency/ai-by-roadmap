@@ -32,7 +32,7 @@ final class Hub
     public const ENVIRONMENTS = ['production', 'staging', 'development'];
 
     /** Default hub; overridden by the AI_BY_ROADMAP_HUB_URL constant or the Hub page. */
-    public const DEFAULT_URL = '';
+    public const DEFAULT_URL = 'https://roadmap-wordpress-mcp.roadmap-agency-inc.workers.dev';
 
     private const PENDING_TTL = 600;
 
